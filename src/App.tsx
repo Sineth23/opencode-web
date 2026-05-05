@@ -205,7 +205,7 @@ export default function App() {
               </label>
             </div>
             <div class="flex-1">
-              <span class="text-lg font-bold">OpenCode</span>
+              <img src="/images/autodoc-logo.svg" alt="AutoDoc" class="h-8" />
             </div>
             <div class="flex-none flex items-center gap-1">
               <button
@@ -255,7 +255,7 @@ export default function App() {
           <label for="drawer-toggle" class="drawer-overlay"></label>
           <div class="w-80 h-full bg-base-200 flex flex-col">
             <div class="p-4 flex justify-between items-center border-b border-base-300">
-              <h2 class="text-xl font-bold">OpenCode</h2>
+              <img src="/images/autodoc-logo.svg" alt="AutoDoc" class="h-8" />
               <div class="flex items-center gap-1">
                 <button
                   class="btn btn-ghost btn-sm hidden lg:flex"

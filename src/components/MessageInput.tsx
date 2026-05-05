@@ -5,6 +5,8 @@ import {
   currentMessages,
   isSending,
   setIsSending,
+  abortCurrentRequest,
+  setAbortController,
 } from "../stores/session";
 
 interface MessageInputProps {
@@ -89,6 +91,9 @@ export default function MessageInput(props: MessageInputProps) {
     setMessage("");
     setIsSending(true);
 
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
       await props.api.session.prompt({
         path: { id: currentSessionId()! },
@@ -105,14 +110,24 @@ export default function MessageInput(props: MessageInputProps) {
             },
           ],
         },
+        signal: controller.signal,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        console.log("Request aborted");
+        return;
+      }
       console.error("Failed to send message:", error);
       alert("Failed to send message");
       setMessage(text);
     } finally {
       setIsSending(false);
+      setAbortController(null);
     }
+  };
+
+  const handleStop = () => {
+    abortCurrentRequest();
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -191,15 +206,22 @@ export default function MessageInput(props: MessageInputProps) {
             onKeyDown={handleKeyDown}
             disabled={isSending()}
           />
-          <button
-            class="btn btn-primary"
-            onClick={handleSend}
-            disabled={!message().trim() || isSending()}
+          <Show
+            when={isSending()}
+            fallback={
+              <button
+                class="btn btn-primary"
+                onClick={handleSend}
+                disabled={!message().trim() || isSending()}
+              >
+                Send
+              </button>
+            }
           >
-            <Show when={isSending()} fallback="Send">
-              <span class="loading loading-spinner loading-sm"></span>
-            </Show>
-          </button>
+            <button class="btn btn-error" onClick={handleStop}>
+              Stop
+            </button>
+          </Show>
         </div>
       </div>
     </div>

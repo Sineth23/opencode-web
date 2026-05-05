@@ -9,6 +9,16 @@ export const [messages, setMessages] = createStore<Record<string, MessageWithPar
 
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [isSending, setIsSending] = createSignal(false);
+export const [abortController, setAbortController] = createSignal<AbortController | null>(null);
+
+export function abortCurrentRequest() {
+  const controller = abortController();
+  if (controller) {
+    controller.abort();
+    setAbortController(null);
+    setIsSending(false);
+  }
+}
 
 export function currentSession() {
   const id = currentSessionId();
