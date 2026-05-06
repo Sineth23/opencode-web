@@ -23,6 +23,11 @@ export default function MessageItem(props: MessageItemProps) {
     return parts.join(" • ");
   };
 
+  const getRunningTime = (part: any) => {
+    if (part.state?.status !== "running" || !part.state?.startedAt) return 0;
+    return Date.now() - new Date(part.state.startedAt).getTime();
+  };
+
   return (
     <div class={`p-4 ${isUser() ? "flex justify-end" : ""}`}>
       <div class={`max-w-4xl ${isUser() ? "w-auto" : "w-full"}`}>
@@ -54,18 +59,18 @@ export default function MessageItem(props: MessageItemProps) {
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     stroke-width="2"
-                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2-2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
                 <span>{props.message.info.error?.data.message}</span>
               </div>
             </Show>
 
-            <For each={props.message.parts}>
+            <For each={props.message.parts} fallback={<div />}>
               {(part) => (
-                <Switch>
+                <Switch fallback={<div />}>
                   <Match when={part.type === "text"}>
-                    <div class="prose max-w-none">
+                    <div class="prose max-w-none prose-sm">
                       <Markdown content={(part as any).text} />
                     </div>
                   </Match>
@@ -113,6 +118,9 @@ export default function MessageItem(props: MessageItemProps) {
                           <span class="font-mono text-sm">
                             {(part as any).tool}
                           </span>
+                          <Show when={getRunningTime(part) > 60000}>
+                            <span class="text-warning text-xs">(slow)</span>
+                          </Show>
                         </div>
 
                         <Show when={(part as any).state.status === "completed"}>
@@ -142,7 +150,6 @@ export default function MessageItem(props: MessageItemProps) {
               when={"tokens" in props.message.info && props.message.info.tokens}
             >
               <div class="text-xs text-base-content/60 mt-2">
-                {/* model/mode • tokens • cost */}
                 {(() => {
                   const info: any = props.message.info as any;
                   const model =

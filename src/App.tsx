@@ -1,4 +1,5 @@
 import { Show, onMount, onCleanup, createSignal } from "solid-js";
+import { batch } from "solid-js";
 import { config } from "./stores/config";
 import { createClient, type OpenCodeClient } from "./api/client";
 import { subscribeToEvents, type EventHandlers } from "./api/sse";
@@ -17,9 +18,34 @@ import MessageInput from "./components/MessageInput";
 import Settings from "./components/Settings";
 import { addSession } from "./stores/session";
 
+let pendingParts: Part[] = [];
+let partDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const PART_FLUSH_INTERVAL = 16;
+
+const flushParts = () => {
+  if (pendingParts.length === 0) return;
+  const parts = pendingParts.splice(0);
+  batch(() => {
+    for (const part of parts) {
+      updatePart(part.sessionID, part.messageID, part);
+    }
+  });
+};
+
+const debouncedUpdatePart = (part: Part) => {
+  pendingParts.push(part);
+  if (!partDebounceTimer) {
+    partDebounceTimer = setTimeout(() => {
+      partDebounceTimer = null;
+      flushParts();
+    }, PART_FLUSH_INTERVAL);
+  }
+};
+
 export default function App() {
   const [api, setApi] = createSignal<OpenCodeClient | null>(null);
   const [showSettings, setShowSettings] = createSignal(false);
+  const [isReconnecting, setIsReconnecting] = createSignal(false);
 
   let eventStreamAbort: AbortController | null = null;
   let reconnectWake: (() => void) | null = null;
@@ -45,17 +71,17 @@ export default function App() {
 
   const startEventStream = (client: OpenCodeClient) => {
     const handlers = {
-      onMessageCreated: (data: { info: Message }) => {
+      onMessageCreated: (data: { info: Message }) => batch(() => {
         updateMessage(data.info.sessionID, data.info.id, data.info);
-      },
-      onMessageUpdate: (data: { info: Message }) => {
+      }),
+      onMessageUpdate: (data: { info: Message }) => batch(() => {
         updateMessage(data.info.sessionID, data.info.id, data.info);
-      },
+      }),
       onPartCreated: (data: { part: Part }) => {
-        updatePart(data.part.sessionID, data.part.messageID, data.part);
+        debouncedUpdatePart(data.part);
       },
       onPartUpdate: (data: { part: Part }) => {
-        updatePart(data.part.sessionID, data.part.messageID, data.part);
+        debouncedUpdatePart(data.part);
       },
     } satisfies EventHandlers;
 
@@ -110,6 +136,7 @@ export default function App() {
 
           hasConnectedToEvents = true;
           connectionErrorNotified = false;
+          setIsReconnecting(false);
           attempt = 0;
           await subscribeToEvents(stream, handlers);
 
@@ -118,6 +145,7 @@ export default function App() {
           }
 
           console.info("Event stream ended; attempting to reconnect...");
+          setIsReconnecting(true);
         } catch (error) {
           if (eventLoopStopped) {
             break;
@@ -129,6 +157,7 @@ export default function App() {
             connectionErrorNotified = true;
             setShowSettings(true);
           }
+          setIsReconnecting(true);
           attempt = Math.min(attempt + 1, 5);
           console.warn("Event stream interrupted, retrying shortly...", error);
         } finally {
@@ -178,6 +207,10 @@ export default function App() {
     reconnectWake?.();
     eventStreamAbort = null;
     reconnectWake = null;
+    if (partDebounceTimer) {
+      clearTimeout(partDebounceTimer);
+      flushParts();
+    }
   });
 
   return (
@@ -186,6 +219,12 @@ export default function App() {
         <input id="drawer-toggle" type="checkbox" class="drawer-toggle" />
 
         <div class="drawer-content flex flex-col max-h-dvh">
+          <Show when={isReconnecting()}>
+            <div class="alert alert-warning m-2">
+              <span class="loading loading-spinner loading-sm"></span>
+              <span>Reconnecting...</span>
+            </div>
+          </Show>
           <div class="navbar bg-base-200 lg:hidden">
             <div class="flex-none">
               <label for="drawer-toggle" class="btn btn-square btn-ghost">

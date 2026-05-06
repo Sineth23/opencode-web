@@ -20,6 +20,25 @@ export function abortCurrentRequest() {
   }
 }
 
+export function forceResetSending() {
+  setAbortController(null);
+  setIsSending(false);
+}
+
+export function clearStaleParts(sessionId: string) {
+  const sessionMessages = messages[sessionId];
+  if (!sessionMessages) return;
+  
+  const cleaned = sessionMessages.map(msg => {
+    const parts = msg.parts.filter(part => 
+      part.type === "tool" ? part.state.status !== "running" : true
+    );
+    return { ...msg, parts };
+  }).filter(msg => msg.parts.length > 0 || msg.info.role === "user");
+  
+  setMessages(sessionId, cleaned);
+}
+
 export function currentSession() {
   const id = currentSessionId();
   if (!id) return null;

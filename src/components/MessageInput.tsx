@@ -7,6 +7,9 @@ import {
   setIsSending,
   abortCurrentRequest,
   setAbortController,
+  setSessionMessages,
+  forceResetSending,
+  clearStaleParts,
 } from "../stores/session";
 
 interface MessageInputProps {
@@ -88,6 +91,24 @@ export default function MessageInput(props: MessageInputProps) {
     }
 
     const text = message().trim();
+    
+    // Check for slash commands
+    if (text.startsWith("/")) {
+      const [cmd] = text.split(" ");
+      
+      if (cmd === "/clear") {
+        setMessage("");
+        setSessionMessages(currentSessionId()!, []);
+        return;
+      }
+      
+      if (cmd === "/compact") {
+        setMessage("");
+        await handleCompact();
+        return;
+      }
+    }
+
     setMessage("");
     setIsSending(true);
 
@@ -118,7 +139,6 @@ export default function MessageInput(props: MessageInputProps) {
         return;
       }
       console.error("Failed to send message:", error);
-      alert("Failed to send message");
       setMessage(text);
     } finally {
       setIsSending(false);
@@ -128,6 +148,29 @@ export default function MessageInput(props: MessageInputProps) {
 
   const handleStop = () => {
     abortCurrentRequest();
+  };
+
+  const handleCompact = async () => {
+    if (!props.api || !currentSessionId() || isSending()) {
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      await props.api.session.summarize({
+        path: { id: currentSessionId()! },
+        body: {
+          providerID: selectedProvider(),
+          modelID: selectedModel(),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to compact session:", error);
+      alert("Failed to compact session");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -222,6 +265,17 @@ export default function MessageInput(props: MessageInputProps) {
               Stop
             </button>
           </Show>
+          <button
+            class="btn btn-ghost btn-sm"
+            onClick={() => {
+              forceResetSending();
+              const sid = currentSessionId();
+              if (sid) clearStaleParts(sid);
+            }}
+            title="Reset stuck state"
+          >
+            ↺
+          </button>
         </div>
       </div>
     </div>

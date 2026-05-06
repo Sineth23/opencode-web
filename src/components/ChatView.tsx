@@ -1,4 +1,4 @@
-import { For, Show, createEffect, onCleanup, onMount, createSignal } from 'solid-js';
+import { For, Show, createEffect, onCleanup, onMount, createSignal, batch } from 'solid-js';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import type { OpenCodeClient } from '../api/client';
 import { currentMessages, currentSession } from '../stores/session';
@@ -31,17 +31,16 @@ export default function ChatView(_props: ChatViewProps) {
     estimateSize: () => 200,
     overscan: 8,
     getItemKey: (index) => currentMessages()[index]?.info.id || index,
-    // Measure using offsetHeight for stable sizing
     measureElement: (element) => (element as HTMLElement).offsetHeight,
   });
 
-  // Re-measure on message length change; auto-scroll only if already at bottom
+  let rafId: number | undefined;
   createEffect(() => {
     const len = currentMessages().length;
     if (len > 0) {
-      requestAnimationFrame(() => {
-        virtualizer.measure();
-        requestAnimationFrame(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        batch(() => {
           virtualizer.measure();
           if (atBottom() && scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight;
           updateAtBottom();
@@ -50,23 +49,22 @@ export default function ChatView(_props: ChatViewProps) {
     }
   });
 
-  // Per-row component with ResizeObserver to remeasure on content changes
+  onCleanup(() => {
+    if (rafId) cancelAnimationFrame(rafId);
+  });
+
   function Row(props: { index: number; start: number; key: string; message: any }) {
     let refEl: HTMLDivElement | undefined;
     let ro: ResizeObserver | undefined;
 
     onMount(() => {
       if (refEl) {
-        // Post-paint remeasures to catch async content growth
-        requestAnimationFrame(() => {
-          if (refEl) virtualizer.measureElement(refEl);
-          requestAnimationFrame(() => {
-            if (refEl) virtualizer.measureElement(refEl);
-          });
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          virtualizer.measureElement(refEl!);
         });
-        // Observe size changes (e.g., markdown highlight, images loading)
         ro = new ResizeObserver(() => {
-          if (refEl) virtualizer.measureElement(refEl);
+          virtualizer.measureElement(refEl!);
         });
         ro.observe(refEl);
       }
@@ -88,7 +86,7 @@ export default function ChatView(_props: ChatViewProps) {
           left: 0,
           width: '100%',
           transform: `translateY(${props.start}px)`,
-          display: 'flow-root', // prevent margin-collapsing
+          display: 'flow-root',
         }}
       >
         <MessageItem message={props.message} />
