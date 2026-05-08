@@ -91,7 +91,7 @@ function AppContent() {
 
     const loadSessions = async (signal: AbortSignal) => {
       const response = await client.session.list({ signal });
-      const { data: { data: sessionList } } = response;
+      const sessionList = (response.data as any)?.data || response.data;
       if (!sessionList) throw new Error("Failed to fetch sessions");
 
       const sortedSessions = [...sessionList].sort(
@@ -118,8 +118,8 @@ function AppContent() {
         } catch (error: any) {
           // Task may still be provisioning, don't break the connection
           if (error?.response?.status === 502 || error?.status === 502) {
-            console.warn(`Session ${targetId} task not ready yet, skipping messages`);
-            setSessionMessages(targetId, []);
+            console.warn(`Session ${targetId} task not ready yet, skipping message load`);
+            // Don't clear messages - keep what we have
           } else {
             throw error;
           }
