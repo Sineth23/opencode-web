@@ -32,39 +32,59 @@ export default function MessageInput(props: MessageInputProps) {
   let textareaRef: HTMLTextAreaElement | undefined;
 
   onMount(async () => {
-    if (!props.api) return;
+    console.log('[MessageInput] onMount called, api:', !!props.api);
+    if (!props.api) {
+      console.warn('[MessageInput] No API client available');
+      return;
+    }
 
     try {
-      const [{ data: providersData }, { data: agentsData }] = await Promise.all(
+      console.log('[MessageInput] Loading providers and agents...');
+      const [providersResp, agentsResp] = await Promise.all(
         [props.api.config.providers(), props.api.app.agents()],
       );
 
-      if (providersData) {
+      console.log('[MessageInput] Providers response:', providersResp);
+      console.log('[MessageInput] Agents response:', agentsResp);
+
+      const providersData = providersResp?.data;
+      const agentsData = agentsResp?.data;
+
+      if (providersData?.providers) {
+        console.log('[MessageInput] Setting providers:', providersData.providers.length);
         setProviders(providersData.providers);
 
         if (providersData.providers.length > 0) {
           const defaultProvider = providersData.providers[0];
           setSelectedProvider(defaultProvider.id);
 
-          const models = Object.keys(defaultProvider.models);
+          const models = Object.keys(defaultProvider.models || {});
           if (models.length > 0) {
             setSelectedModel(models[0]);
           }
         }
+      } else {
+        console.warn('[MessageInput] No providers data in response');
       }
 
       if (agentsData) {
-        setAgents(agentsData.filter((a) => a.mode !== "subagent"));
+        console.log('[MessageInput] Setting agents:', agentsData.length);
+        const filtered = Array.isArray(agentsData)
+          ? agentsData.filter((a: any) => a.mode !== "subagent")
+          : [];
+        setAgents(filtered);
 
-        if (agentsData.length > 0) {
-          const buildAgent = agentsData.find((a) => a.name === "build");
-          setSelectedAgent(buildAgent?.name || agentsData[0].name);
+        if (filtered.length > 0) {
+          const buildAgent = filtered.find((a: any) => a.name === "build");
+          setSelectedAgent(buildAgent?.name || filtered[0].name);
         }
+      } else {
+        console.warn('[MessageInput] No agents data in response');
       }
 
       updateFromLastMessage();
     } catch (error) {
-      console.error("Failed to load models/agents:", error);
+      console.error("[MessageInput] Failed to load models/agents:", error);
     }
   });
 
