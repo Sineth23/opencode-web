@@ -213,7 +213,8 @@ function AppContent() {
     reconnectWake = null;
     hasConnectedToEvents = false;
     connectionErrorNotified = false;
-    startEventStream(client);
+    // TODO: Re-enable event stream once Kinesis integration is working
+    // startEventStream(client);
   });
 
   onCleanup(() => {
