@@ -74,37 +74,70 @@ export function setSessionMessages(sessionId: string, msgs: MessageWithParts[]) 
 
 export function updateMessage(sessionId: string, messageId: string, info: Message) {
   const sessionMessages = messages[sessionId];
+
   if (!sessionMessages) {
-    setMessages(sessionId, [{ info, parts: [] }]);
+    // Create first message for this session
+    const newMessages: MessageWithParts[] = [{ info, parts: [] }];
+    setMessages(sessionId, newMessages);
+    console.debug('[updateMessage] Created first message:', { sessionId, messageId, totalMessages: 1 });
     return;
   }
 
   const index = sessionMessages.findIndex((m) => m.info.id === messageId);
   if (index !== -1) {
+    // Update existing message
     setMessages(sessionId, index, 'info', info);
+    console.debug('[updateMessage] Updated existing message:', { sessionId, messageId, index });
   } else {
-    setMessages(sessionId, [...sessionMessages, { info, parts: [] }]);
+    // Add new message to session
+    const newMessages: MessageWithParts[] = [
+      ...sessionMessages,
+      { info, parts: [] }
+    ];
+    setMessages(sessionId, newMessages);
+    console.debug('[updateMessage] Added new message:', { sessionId, messageId, totalMessages: newMessages.length });
   }
 }
 
 export function updatePart(sessionId: string, messageId: string, part: Part) {
   const sessionMessages = messages[sessionId];
+
   if (!sessionMessages) {
-    setMessages(sessionId, [{ info: { id: messageId } as any, parts: [part] }]);
+    // Create first message with part
+    const newMessages: MessageWithParts[] = [{
+      info: { id: messageId } as any,
+      parts: [part]
+    }];
+    setMessages(sessionId, newMessages);
+    console.debug('[updatePart] Created first message with part:', { sessionId, messageId, partId: part.id });
     return;
   }
 
   const msgIndex = sessionMessages.findIndex((m) => m.info.id === messageId);
   if (msgIndex === -1) {
-    setMessages(sessionId, [...sessionMessages, { info: { id: messageId } as any, parts: [part] }]);
+    // Message doesn't exist, create it with the part
+    const newMessages: MessageWithParts[] = [
+      ...sessionMessages,
+      { info: { id: messageId } as any, parts: [part] }
+    ];
+    setMessages(sessionId, newMessages);
+    console.debug('[updatePart] Added new message with part:', { sessionId, messageId, partId: part.id });
     return;
   }
 
-  const partIndex = sessionMessages[msgIndex].parts.findIndex((p) => p.id === part.id);
+  // Message exists, update or add part
+  const message = sessionMessages[msgIndex];
+  const partIndex = message.parts.findIndex((p) => p.id === part.id);
+
   if (partIndex !== -1) {
+    // Part already exists, update it
     setMessages(sessionId, msgIndex, 'parts', partIndex, part);
+    console.debug('[updatePart] Updated existing part:', { sessionId, messageId, partId: part.id });
   } else {
-    setMessages(sessionId, msgIndex, 'parts', [...sessionMessages[msgIndex].parts, part]);
+    // Add new part to message
+    const newParts: Part[] = [...message.parts, part];
+    setMessages(sessionId, msgIndex, 'parts', newParts);
+    console.debug('[updatePart] Added new part to message:', { sessionId, messageId, partId: part.id, totalParts: newParts.length });
   }
 }
 

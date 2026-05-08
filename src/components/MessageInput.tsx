@@ -10,7 +10,10 @@ import {
   setSessionMessages,
   forceResetSending,
   clearStaleParts,
+  updateMessage,
+  updatePart,
 } from "../stores/session";
+import S3Browser from "./S3Browser";
 
 interface MessageInputProps {
   api: OpenCodeClient | null;
@@ -23,6 +26,8 @@ export default function MessageInput(props: MessageInputProps) {
   const [selectedProvider, setSelectedProvider] = createSignal<string>("");
   const [selectedModel, setSelectedModel] = createSignal<string>("");
   const [selectedAgent, setSelectedAgent] = createSignal<string>("");
+  const [selectedFile, setSelectedFile] = createSignal<{ key: string; size: number } | null>(null);
+  const [selectedFileContent, setSelectedFileContent] = createSignal<string>("");
 
   let textareaRef: HTMLTextAreaElement | undefined;
 
@@ -86,22 +91,22 @@ export default function MessageInput(props: MessageInputProps) {
   });
 
   const handleSend = async () => {
-    if (!props.api || !message().trim() || isSending() || !currentSessionId()) {
+    if (!message().trim() || isSending() || !currentSessionId()) {
       return;
     }
 
-    const text = message().trim();
-    
+    let text = message().trim();
+
     // Check for slash commands
     if (text.startsWith("/")) {
       const [cmd] = text.split(" ");
-      
+
       if (cmd === "/clear") {
         setMessage("");
         setSessionMessages(currentSessionId()!, []);
         return;
       }
-      
+
       if (cmd === "/compact") {
         setMessage("");
         await handleCompact();
@@ -109,30 +114,122 @@ export default function MessageInput(props: MessageInputProps) {
       }
     }
 
+    // Include S3 file content if selected
+    if (selectedFileContent()) {
+      text += `\n\nS3 File: ${selectedFile()?.key}\n\`\`\`\n${selectedFileContent()}\n\`\`\``;
+    }
+
     setMessage("");
+    setSelectedFile(null);
+    setSelectedFileContent("");
     setIsSending(true);
 
     const controller = new AbortController();
     setAbortController(controller);
 
     try {
-      await props.api.session.prompt({
-        path: { id: currentSessionId()! },
-        body: {
-          model: {
-            providerID: selectedProvider(),
-            modelID: selectedModel(),
+      const requestBody: any = {
+        parts: [
+          {
+            type: "text",
+            text,
           },
-          agent: selectedAgent(),
-          parts: [
-            {
-              type: "text",
-              text,
-            },
-          ],
-        },
-        signal: controller.signal,
-      });
+        ],
+      };
+
+      // Add model/agent if selected
+      if (selectedProvider() && selectedModel()) {
+        requestBody.model = {
+          providerID: selectedProvider(),
+          modelID: selectedModel(),
+        };
+      }
+
+      if (selectedAgent()) {
+        requestBody.agent = selectedAgent();
+      }
+
+      // Use direct fetch instead of SDK to bypass GET/HEAD issue
+      const token = localStorage.getItem('cognito_id_token');
+      const apiUrl = import.meta.env.VITE_API_DEFAULT || 'https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com';
+
+      const response = await fetch(
+        `${apiUrl}/session/${currentSessionId()}/message`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+
+      // Parse response and add to messages
+      let responseData: any = null;
+      const responseText = await response.text();
+      console.log("Raw message response:", responseText);
+
+      if (responseText) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (e) {
+          console.warn("Failed to parse response as JSON:", e);
+        }
+      }
+      console.log("Parsed message response:", responseData);
+
+      const sessionId = currentSessionId();
+      if (!sessionId) {
+        console.error('No session ID available');
+        return;
+      }
+
+      // Add user message to UI
+      const userMessageId = `msg-${Date.now()}`;
+      const userInfo = {
+        id: userMessageId,
+        role: "user",
+      };
+      updateMessage(sessionId, userMessageId, userInfo);
+      console.log('[MessageInput] Added user message:', userMessageId);
+
+      // Add the text as a part
+      const userPart = {
+        id: `part-${Date.now()}`,
+        messageID: userMessageId,
+        type: "text" as const,
+        index: 0,
+        text,
+      };
+      updatePart(sessionId, userMessageId, userPart);
+      console.log('[MessageInput] Added user part:', userPart.id);
+
+      // Add assistant response if present
+      if (responseData && typeof responseData === 'object') {
+        const assistantMessageId = `msg-${Date.now() + 1}`;
+        const assistantInfo = {
+          id: assistantMessageId,
+          role: "assistant",
+        };
+        updateMessage(sessionId, assistantMessageId, assistantInfo);
+        console.log('[MessageInput] Added assistant message:', assistantMessageId);
+
+        const responsePart = {
+          id: `part-${Date.now() + 1}`,
+          messageID: assistantMessageId,
+          type: "text" as const,
+          index: 0,
+          text: JSON.stringify(responseData, null, 2),
+        };
+        updatePart(sessionId, assistantMessageId, responsePart);
+        console.log('[MessageInput] Added assistant part:', responsePart.id);
+      }
     } catch (error: any) {
       if (error?.name === "AbortError") {
         console.log("Request aborted");
@@ -238,6 +335,45 @@ export default function MessageInput(props: MessageInputProps) {
             </For>
           </select>
         </div>
+
+        <div class="border-t border-base-300">
+          <details class="collapse collapse-arrow bg-base-100">
+            <summary class="collapse-title text-sm font-semibold">
+              📁 S3 File Browser
+              <Show when={selectedFile()}>
+                <span class="badge badge-primary badge-sm ml-2">{selectedFile()?.key?.split("/").pop()}</span>
+              </Show>
+            </summary>
+            <div class="collapse-content">
+              <S3Browser
+                onSelectFile={(file, content) => {
+                  setSelectedFile(file);
+                  setSelectedFileContent(content || "");
+                }}
+              />
+            </div>
+          </details>
+        </div>
+
+        <Show when={selectedFile() && selectedFileContent()}>
+          <div class="bg-base-200 p-3 rounded border-l-4 border-primary">
+            <div class="text-sm font-semibold mb-2">📎 Selected File</div>
+            <div class="text-xs text-base-content/70 mb-2">{selectedFile()?.key}</div>
+            <div class="max-h-24 overflow-y-auto bg-base-100 p-2 rounded text-xs font-mono">
+              {selectedFileContent()?.substring(0, 200)}
+              {selectedFileContent()?.length ?? 0 > 200 ? "..." : ""}
+            </div>
+            <button
+              class="btn btn-xs btn-ghost mt-2"
+              onClick={() => {
+                setSelectedFile(null);
+                setSelectedFileContent("");
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        </Show>
 
         <div class="flex gap-2">
           <textarea
