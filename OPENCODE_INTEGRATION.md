@@ -747,6 +747,37 @@ aws dynamodb get-item \
   --region ca-central-1
 ```
 
+### Problem 11: Messages Disappearing from UI (Session 4)
+**Root Cause**: User messages were only added to the UI after the fetch request succeeded. If the task was provisioning (502 error), messages never appeared, leaving the user without feedback.
+
+**Solution**: Add user messages to the UI **immediately when sent**, before attempting to reach the task.
+
+**Files Modified**:
+1. `c:\Users\Sineth\opencode-web\src\components\MessageInput.tsx` (lines 142-176)
+   - Moved `updateMessage()` and `updatePart()` calls BEFORE the fetch request
+   - User sees message appear instantly regardless of task state
+   - Task response is added separately if it arrives successfully
+
+**Why This Works**:
+- Optimistic UI updates: Users get immediate feedback when they send a message
+- Resilient to task provisioning delays: Messages persist even if task returns 502
+- Better UX: No more disappearing messages while waiting for task initialization
+
+### Problem 12: Infinite Reconnection Loop Spamming Logs (Session 4)
+**Root Cause**: Event stream subscription to Kinesis was failing and retrying continuously with exponential backoff, spamming console with reconnection warnings.
+
+**Symptom**: "Reconnecting..." banner appeared repeatedly, console logs filled with connection errors
+
+**Solution**: Disabled event stream integration temporarily since messages work via direct POST requests
+
+**File Modified**: `c:\Users\Sineth\opencode-web\src/App.tsx` (line 206)
+```typescript
+// TODO: Re-enable event stream once Kinesis integration is working
+// startEventStream(client);
+```
+
+**Status**: Messages are now working end-to-end without needing real-time event updates. Event stream can be re-enabled once Kinesis subscription is properly configured.
+
 ## References
 
 ### Repositories
