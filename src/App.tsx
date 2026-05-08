@@ -109,11 +109,21 @@ function AppContent() {
       }
 
       if (targetId) {
-        const { data: msgs } = await client.session.messages({
-          path: { id: targetId },
-          signal,
-        });
-        setSessionMessages(targetId, msgs ?? []);
+        try {
+          const { data: msgs } = await client.session.messages({
+            path: { id: targetId },
+            signal,
+          });
+          setSessionMessages(targetId, msgs ?? []);
+        } catch (error: any) {
+          // Task may still be provisioning, don't break the connection
+          if (error?.response?.status === 502 || error?.status === 502) {
+            console.warn(`Session ${targetId} task not ready yet, skipping messages`);
+            setSessionMessages(targetId, []);
+          } else {
+            throw error;
+          }
+        }
       }
     };
 
