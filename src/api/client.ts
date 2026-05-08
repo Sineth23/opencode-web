@@ -17,5 +17,21 @@ export interface MessageWithParts {
 }
 
 export function createClient(baseUrl: string) {
-  return createOpencodeClient({ baseUrl });
+  // Custom fetch that adds JWT token to Authorization header
+  const customFetch = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('cognito_id_token');
+
+    if (token) {
+      const headers = new Headers(options.headers || {});
+      headers.set('Authorization', `Bearer ${token}`);
+      options.headers = headers;
+    }
+
+    return fetch(url, options);
+  };
+
+  return createOpencodeClient({
+    baseUrl,
+    fetch: customFetch,
+  });
 }

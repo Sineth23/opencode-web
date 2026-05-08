@@ -12,15 +12,41 @@ export const AVAILABLE_THEMES = [
 
 export type Theme = typeof AVAILABLE_THEMES[number];
 
+export interface CognitoSettings {
+  clientId: string;
+  userPoolId: string;
+  region: string;
+  endpoint: string;
+}
+
 interface Config {
   apiEndpoint: string;
   theme: Theme;
+  cognito?: CognitoSettings;
 }
 
 const defaultConfig: Config = {
   apiEndpoint: '',
   theme: 'dark',
 };
+
+function loadCognitoConfig(): CognitoSettings | undefined {
+  const env = (import.meta as any).env;
+  if (
+    env?.VITE_COGNITO_CLIENT_ID &&
+    env?.VITE_COGNITO_USER_POOL_ID &&
+    env?.VITE_COGNITO_REGION
+  ) {
+    const region = env.VITE_COGNITO_REGION as string;
+    return {
+      clientId: env.VITE_COGNITO_CLIENT_ID as string,
+      userPoolId: env.VITE_COGNITO_USER_POOL_ID as string,
+      region,
+      endpoint: `https://cognito-idp.${region}.amazonaws.com/`,
+    };
+  }
+  return undefined;
+}
 
 function loadConfig(): Config {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -36,6 +62,7 @@ function loadConfig(): Config {
   if (!cfg.apiEndpoint && fromEnv) {
     cfg = { ...cfg, apiEndpoint: fromEnv };
   }
+  cfg.cognito = loadCognitoConfig();
   return cfg;
 }
 

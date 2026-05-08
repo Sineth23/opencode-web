@@ -16,7 +16,10 @@ import SessionList from "./components/SessionList";
 import ChatView from "./components/ChatView";
 import MessageInput from "./components/MessageInput";
 import Settings from "./components/Settings";
+import AuthProvider from "./components/AuthProvider";
 import { addSession } from "./stores/session";
+import { useAuth } from "./components/AuthProvider";
+import { clearAuthState } from "./utils/cognito";
 
 let pendingParts: Part[] = [];
 let partDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -42,10 +45,11 @@ const debouncedUpdatePart = (part: Part) => {
   }
 };
 
-export default function App() {
+function AppContent() {
   const [api, setApi] = createSignal<OpenCodeClient | null>(null);
   const [showSettings, setShowSettings] = createSignal(false);
   const [isReconnecting, setIsReconnecting] = createSignal(false);
+  const auth = useAuth();
 
   let eventStreamAbort: AbortController | null = null;
   let reconnectWake: (() => void) | null = null;
@@ -86,7 +90,8 @@ export default function App() {
     } satisfies EventHandlers;
 
     const loadSessions = async (signal: AbortSignal) => {
-      const { data: sessionList } = await client.session.list({ signal });
+      const response = await client.session.list({ signal });
+      const { data: { data: sessionList } } = response;
       if (!sessionList) throw new Error("Failed to fetch sessions");
 
       const sortedSessions = [...sessionList].sort(
@@ -277,6 +282,19 @@ export default function App() {
                   />
                 </svg>
               </button>
+              <div class="dropdown dropdown-end">
+                <button class="btn btn-ghost btn-sm" title="Account menu">
+                  <Show when={auth.email} fallback="Account">
+                    {auth.email}
+                  </Show>
+                </button>
+                <ul class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-52">
+                  <li><a onClick={() => {
+                    clearAuthState();
+                    window.location.reload();
+                  }}>Logout</a></li>
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -328,6 +346,19 @@ export default function App() {
                     />
                   </svg>
                 </button>
+                <div class="dropdown dropdown-end hidden lg:flex">
+                  <button class="btn btn-ghost btn-sm" title="Account menu">
+                    <Show when={auth.email} fallback="Account">
+                      {auth.email}
+                    </Show>
+                  </button>
+                  <ul class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-52">
+                    <li><a onClick={() => {
+                      clearAuthState();
+                      window.location.reload();
+                    }}>Logout</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -344,4 +375,19 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+export default function App() {
+  const cfg = config();
+  const cognitoConfig = cfg.cognito;
+
+  if (cognitoConfig) {
+    return (
+      <AuthProvider config={cognitoConfig}>
+        <AppContent />
+      </AuthProvider>
+    );
+  }
+
+  return <AppContent />;
 }

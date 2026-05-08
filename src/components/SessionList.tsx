@@ -155,7 +155,15 @@ export default function SessionList(props: SessionListProps) {
 
   return (
     <div class="flex-1 flex flex-col overflow-hidden">
-
+      <div class="p-4 border-b border-base-300">
+        <button
+          class="btn btn-primary btn-sm w-full"
+          onClick={handleCreateSession}
+          disabled={isCreating()}
+        >
+          {isCreating() ? 'Creating...' : '+ New Session'}
+        </button>
+      </div>
 
       <div class="flex-1 overflow-y-auto">
         <For each={sessions()}>
@@ -171,9 +179,9 @@ export default function SessionList(props: SessionListProps) {
                 fallback={
                   <div class="flex items-start justify-between gap-2">
                     <div class="flex-1 min-w-0">
-                      <div class="font-medium truncate">{session.title}</div>
+                      <div class="font-medium truncate">{session.title || 'Untitled'}</div>
                       <div class="text-sm text-base-content/60">
-                        {formatDate(session.time.updated)}
+                        {session.time?.updated ? formatDate(session.time.updated) : 'just now'}
                       </div>
                     </div>
                     <div class="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>

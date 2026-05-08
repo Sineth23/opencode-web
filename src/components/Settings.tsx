@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup } from "solid-js";
+import { createSignal, For, onCleanup, Show } from "solid-js";
 import {
   config,
   updateApiEndpoint,
@@ -7,6 +7,7 @@ import {
   type Theme,
 } from "../stores/config";
 import { createClient } from "../api/client";
+import { clearAuthState, isAuthenticated } from "../utils/cognito";
 
 interface SettingsProps {
   onClose: () => void;
@@ -132,15 +133,28 @@ export default function Settings(props: SettingsProps) {
           </div>
         )}
 
-        <div class="card-actions justify-end gap-2">
-          {config().apiEndpoint && (
-            <button class="btn btn-ghost" onClick={props.onClose}>
-              Close
+        <div class="card-actions justify-between gap-2">
+          <Show when={isAuthenticated()}>
+            <button
+              class="btn btn-error btn-outline"
+              onClick={() => {
+                clearAuthState();
+                window.location.reload();
+              }}
+            >
+              Logout
             </button>
-          )}
-          <button class="btn btn-primary" onClick={handleSave}>
-            Save & Connect
-          </button>
+          </Show>
+          <div class="flex gap-2">
+            {config().apiEndpoint && (
+              <button class="btn btn-ghost" onClick={props.onClose}>
+                Close
+              </button>
+            )}
+            <button class="btn btn-primary" onClick={handleSave}>
+              Save & Connect
+            </button>
+          </div>
         </div>
       </div>
     </div>
