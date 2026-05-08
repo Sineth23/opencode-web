@@ -147,6 +147,32 @@ export default function MessageInput(props: MessageInputProps) {
     const controller = new AbortController();
     setAbortController(controller);
 
+    const sessionId = currentSessionId();
+    if (!sessionId) {
+      console.error('No session ID available');
+      setIsSending(false);
+      return;
+    }
+
+    // Add user message to UI immediately (before sending)
+    const userMessageId = `msg-${Date.now()}`;
+    const userInfo = {
+      id: userMessageId,
+      role: "user",
+    };
+    updateMessage(sessionId, userMessageId, userInfo);
+    console.log('[MessageInput] Added user message:', userMessageId);
+
+    const userPart = {
+      id: `part-${Date.now()}`,
+      messageID: userMessageId,
+      type: "text" as const,
+      index: 0,
+      text,
+    };
+    updatePart(sessionId, userMessageId, userPart);
+    console.log('[MessageInput] Added user part:', userPart.id);
+
     try {
       const requestBody: any = {
         parts: [
@@ -174,7 +200,7 @@ export default function MessageInput(props: MessageInputProps) {
       const apiUrl = import.meta.env.VITE_API_DEFAULT || 'https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com';
 
       const response = await fetch(
-        `${apiUrl}/session/${currentSessionId()}/message`,
+        `${apiUrl}/session/${sessionId}/message`,
         {
           method: 'POST',
           headers: {
@@ -204,32 +230,6 @@ export default function MessageInput(props: MessageInputProps) {
       }
       console.log("Parsed message response:", responseData);
 
-      const sessionId = currentSessionId();
-      if (!sessionId) {
-        console.error('No session ID available');
-        return;
-      }
-
-      // Add user message to UI
-      const userMessageId = `msg-${Date.now()}`;
-      const userInfo = {
-        id: userMessageId,
-        role: "user",
-      };
-      updateMessage(sessionId, userMessageId, userInfo);
-      console.log('[MessageInput] Added user message:', userMessageId);
-
-      // Add the text as a part
-      const userPart = {
-        id: `part-${Date.now()}`,
-        messageID: userMessageId,
-        type: "text" as const,
-        index: 0,
-        text,
-      };
-      updatePart(sessionId, userMessageId, userPart);
-      console.log('[MessageInput] Added user part:', userPart.id);
-
       // Add assistant response if present
       if (responseData && typeof responseData === 'object') {
         const assistantMessageId = `msg-${Date.now() + 1}`;
@@ -256,7 +256,6 @@ export default function MessageInput(props: MessageInputProps) {
         return;
       }
       console.error("Failed to send message:", error);
-      setMessage(text);
     } finally {
       setIsSending(false);
       setAbortController(null);
