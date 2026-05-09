@@ -193,7 +193,21 @@ export function clearAuthState() {
 
 export function isAuthenticated(): boolean {
   const state = loadAuthState();
-  return !!state.idToken;
+  if (!state.idToken) return false;
+
+  try {
+    const payload = JSON.parse(atob(state.idToken.split(".")[1]));
+    const expiresAt = (payload.exp || 0) * 1000;
+    const now = Date.now();
+    if (now > expiresAt) {
+      clearAuthState();
+      return false;
+    }
+    return true;
+  } catch {
+    clearAuthState();
+    return false;
+  }
 }
 
 export function getTenantId(): string | null {

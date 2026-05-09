@@ -802,6 +802,86 @@ aws dynamodb get-item \
 
 **Status**: Messages are now working end-to-end without needing real-time event updates. Event stream can be re-enabled once Kinesis subscription is properly configured.
 
+---
+
+## Session 5: MiniMax Free Model Integration (2026-05-09)
+
+**Status**: ✅ **IN PROGRESS** - Implementing MiniMax provider to get actual LLM responses
+
+### Problem: No LLM Responses (Bedrock Not Configured)
+**Issue**: Messages send and appear in UI, but no actual responses come back from an LLM. The system tried to use AWS Bedrock/Anthropic models but they weren't configured.
+
+**Root Cause**: OpenCode container was configured with Bedrock provider, but ECS task role lacks Bedrock API permissions and Anthropic Claude models require explicit API configuration.
+
+### Solution: Replace with MiniMax Free Model
+
+**Implementation**:
+1. **Use OpenAI-Compatible Provider**: MiniMax offers free API access with OpenAI-compatible format
+2. **Pass Config via Environment Variable**: Use `OPENCODE_CONFIG_CONTENT` environment variable to pass MiniMax configuration to container
+3. **Leverage Existing OpenCode Support**: OpenCode already supports `openai-compatible` provider from Vercel AI SDK
+
+**Files Modified**:
+- `C:\Users\Sineth\autodoc-control-plane-cdk\lambdas\opencode_session_start\handler.py`
+  - Lines 22-23: Added `import json` for config serialization
+  - Lines 139-157: Replaced `BEDROCK_MODEL_ID` with `OPENCODE_CONFIG_CONTENT`
+  - Config passes MiniMax endpoint and abab6.5 model to container
+
+**Configuration Structure**:
+```python
+minimax_config = {
+    "provider": {
+        "minimax": {
+            "api": "https://api.minimax.chat/v1",
+            "npm": "@ai-sdk/openai-compatible",
+            "name": "MiniMax",
+            "env": ["MINIMAX_API_KEY"],
+            "options": {
+                "baseURL": "https://api.minimax.chat/v1",
+            },
+            "models": {
+                "abab6.5-chat": {
+                    "name": "MiniMax Free Model",
+                    "provider": {
+                        "npm": "@ai-sdk/openai-compatible",
+                        "api": "https://api.minimax.chat/v1"
+                    },
+                    "options": {}
+                }
+            }
+        }
+    }
+}
+```
+
+**How It Works**:
+1. Lambda passes `OPENCODE_CONFIG_CONTENT` (JSON string) to ECS task
+2. OpenCode entrypoint.sh detects `OPENCODE_CONFIG_CONTENT` and writes it to config.json
+3. OpenCode boots with MiniMax provider configured
+4. When user sends message, OpenCode uses `abab6.5-chat` model
+5. Request goes to https://api.minimax.chat/v1 with OpenAI-compatible format
+6. MiniMax API returns actual LLM responses
+7. Responses appear in chat UI
+
+**Features**:
+- ✅ Uses free MiniMax API (no AWS credentials needed for LLM calls)
+- ✅ OpenAI-compatible format (well-supported by OpenCode)
+- ✅ No Docker image rebuild required (configuration passed at runtime)
+- ✅ Works with existing message flow (no frontend changes needed)
+
+**Deployment Steps**:
+1. ✅ Update Lambda handler with MiniMax config
+2. ⏳ Deploy API stack: `cdk deploy autodoc-control-plane-api --profile autodoc-prod`
+3. ⏳ Test: Create session → Send message → Verify MiniMax response
+4. ⏳ Monitor CloudWatch logs for any errors
+
+**Next Steps**:
+- Verify deployment succeeded
+- Test end-to-end message flow with MiniMax responses
+- Monitor logs for any configuration issues
+- Document final solution
+
+**Note**: The MiniMax free API requires valid API key in `MINIMAX_API_KEY` environment variable. For demo/testing, the configuration uses "demo" as default, but production should set real credentials via Lambda environment variables.
+
 ## References
 
 ### Repositories

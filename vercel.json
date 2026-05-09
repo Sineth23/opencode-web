@@ -2,9 +2,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "env": {
-    "VITE_API_DEFAULT": "@api_endpoint",
-    "VITE_COGNITO_CLIENT_ID": "@cognito_client_id",
-    "VITE_COGNITO_USER_POOL_ID": "@cognito_user_pool_id",
-    "VITE_COGNITO_REGION": "@cognito_region"
+    "VITE_API_DEFAULT": "https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com",
+    "VITE_COGNITO_CLIENT_ID": "5hbjt7mmj7f1ninb7l7q6eq79v",
+    "VITE_COGNITO_USER_POOL_ID": "ca-central-1_BSotcgUgw",
+    "VITE_COGNITO_REGION": "ca-central-1"
   }
 }
