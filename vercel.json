@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "env": {
+    "VITE_API_DEFAULT": "@api_endpoint",
+    "VITE_COGNITO_CLIENT_ID": "@cognito_client_id",
+    "VITE_COGNITO_USER_POOL_ID": "@cognito_user_pool_id",
+    "VITE_COGNITO_REGION": "@cognito_region"
+  }
+}
