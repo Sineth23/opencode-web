@@ -1,148 +1,52 @@
-import { For, Show, createEffect, onCleanup, onMount, createSignal, batch } from 'solid-js';
-import { createVirtualizer } from '@tanstack/solid-virtual';
+import { Show } from 'solid-js';
+import { config } from '../stores/config';
 import type { OpenCodeClient } from '../api/client';
-import { currentMessages, currentSession } from '../stores/session';
-import MessageItem from './MessageItem';
+import { currentSession } from '../stores/session';
 
 interface ChatViewProps {
   api: OpenCodeClient | null;
 }
 
 export default function ChatView(_props: ChatViewProps) {
-  let scrollRef: HTMLDivElement | undefined;
-  const [atBottom, setAtBottom] = createSignal(true);
-
-  const updateAtBottom = () => {
-    if (!scrollRef) return;
-    const delta = scrollRef.scrollHeight - (scrollRef.scrollTop + scrollRef.clientHeight);
-    setAtBottom(delta <= 8);
-  };
-
-  const scrollToBottom = () => {
-    if (!scrollRef) return;
-    scrollRef.scrollTo({ top: scrollRef.scrollHeight, behavior: 'smooth' });
-  };
-
-  const virtualizer = createVirtualizer({
-    get count() {
-      return currentMessages().length;
-    },
-    getScrollElement: () => scrollRef || null,
-    estimateSize: () => 200,
-    overscan: 8,
-    getItemKey: (index) => currentMessages()[index]?.info.id || index,
-    measureElement: (element) => (element as HTMLElement).offsetHeight,
-  });
-
-  let rafId: number | undefined;
-  createEffect(() => {
-    const len = currentMessages().length;
-    if (len > 0) {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        batch(() => {
-          virtualizer.measure();
-          if (atBottom() && scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight;
-          updateAtBottom();
-        });
-      });
-    }
-  });
-
-  onCleanup(() => {
-    if (rafId) cancelAnimationFrame(rafId);
-  });
-
-  function Row(props: { index: number; start: number; key: string; message: any }) {
-    let refEl: HTMLDivElement | undefined;
-    let ro: ResizeObserver | undefined;
-
-    onMount(() => {
-      if (refEl) {
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(() => {
-          virtualizer.measureElement(refEl!);
-        });
-        ro = new ResizeObserver(() => {
-          virtualizer.measureElement(refEl!);
-        });
-        ro.observe(refEl);
-      }
-    });
-
-    onCleanup(() => {
-      if (ro && refEl) ro.unobserve(refEl);
-      ro?.disconnect();
-    });
-
-    return (
-      <div
-        ref={(el) => (refEl = el)}
-        data-index={props.index}
-        data-key={props.key}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          transform: `translateY(${props.start}px)`,
-          display: 'flow-root',
-        }}
-      >
-        <MessageItem message={props.message} />
-      </div>
-    );
-  }
+  const session = currentSession;
+  const apiEndpoint = () => config().apiEndpoint;
 
   return (
     <div class="h-full flex flex-col overflow-hidden">
-      <Show when={currentSession()}>
+      <Show when={session()}>
         <div class="bg-base-200 px-4 py-3 border-b border-base-300 flex items-center justify-between">
           <h1 class="text-lg font-semibold truncate flex-1">
-            {currentSession()?.title}
+            {session()?.title}
           </h1>
         </div>
       </Show>
 
       <div class="relative flex-1 min-h-0">
-        <div ref={scrollRef} class="h-full overflow-y-auto overflow-x-hidden" onScroll={updateAtBottom}>
         <Show
-          when={currentMessages().length > 0}
+          when={session()}
           fallback={
             <div class="h-full flex items-center justify-center text-base-content/60">
               <div class="text-center">
-                <p class="text-lg mb-2">No messages yet</p>
-                <p class="text-sm">Start a conversation by typing a message below</p>
+                <p class="text-lg mb-2">No session selected</p>
+                <p class="text-sm">Create a new session or select an existing one from the list</p>
               </div>
             </div>
           }
         >
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              width: '100%',
-              position: 'relative',
-            }}
-          >
-            <For each={virtualizer.getVirtualItems()}>
-              {(row) => (
-                <Row
-                  index={row.index}
-                  start={row.start}
-                  key={String(row.key)}
-                  message={currentMessages()[row.index]}
-                />
-              )}
-            </For>
-          </div>
-        </Show>
-        </div>
-        <Show when={!atBottom()}>
-          <div class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-            <button class="btn btn-primary btn-sm shadow pointer-events-auto" onClick={scrollToBottom}>
-              Latest
-            </button>
-          </div>
+          {() => {
+            const sessionId = session()?.id;
+            const url = `${apiEndpoint()}/opencode/${sessionId}`;
+
+            return (
+              <iframe
+                src={url}
+                class="w-full h-full border-none"
+                allow="same-origin"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
+                title="OpenCode Web UI"
+              />
+            );
+          }}
         </Show>
       </div>
     </div>

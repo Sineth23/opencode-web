@@ -261,7 +261,22 @@
       "PowerShell($taskId = \"1e993bd5398e400994bbf48f2cfcdc67\")",
       "PowerShell(aws logs get-log-events --log-group-name 'autodoc-control-plane-opencode-workloads-OpencodeLogGroupFF7422FD-mCZHUCBEBqPO' --log-stream-name 'cp-opencode/autodoc-opencode/1e993bd5398e400994bbf48f2cfcdc67' --region ca-central-1 --profile autodoc-prod --query 'events[-20:].message' --output text)",
       "Bash(aws acm *)",
-      "PowerShell(aws logs tail '/aws/lambda/autodoc-control-plane-api-OpenCodeProxyFnB42F3C4E-Q3yAmAufzQDa' --region ca-central-1 --profile autodoc-prod --since 5m 2>&1)"
+      "PowerShell(aws logs tail '/aws/lambda/autodoc-control-plane-api-OpenCodeProxyFnB42F3C4E-Q3yAmAufzQDa' --region ca-central-1 --profile autodoc-prod --since 5m 2>&1)",
+      "PowerShell(aws logs get-log-events --log-group-name 'autodoc-control-plane-opencode-workloads-OpencodeLogGroupFF7422FD-mCZHUCBEBqPO' --log-stream-name 'cp-opencode/autodoc-opencode/db952e7a1759453893c3daea2437369b' --region ca-central-1 --profile autodoc-prod --query 'events[-50:].message' --output text 2>&1)",
+      "Bash(curl -s -X POST http://autodoc-opencode-alb-689415718.ca-central-1.elb.amazonaws.com/session/session_b9d4294eb8a14436/message -H 'Content-Type: application/json' -d '{\"content\":\"Test message\",\"parts\":[{\"type\":\"text\",\"text\":\"Test\"}]}' -w '\\\\nStatus: %{http_code}\\\\nTime: %{time_total}s\\\\n')",
+      "PowerShell(aws logs tail '/autodoc/opencode' --since 10m --region ca-central-1 2>&1)",
+      "PowerShell(aws sts get-caller-identity --region ca-central-1)",
+      "PowerShell(aws ecs list-tasks --cluster arn:aws:ecs:ca-central-1:149536480225:cluster/autodoc --region ca-central-1)",
+      "WebFetch(domain:opencode.ai)",
+      "PowerShell(aws ssm get-parameter --name /autodoc/infra/vpc_id --region ca-central-1 2>&1)",
+      "PowerShell(aws cloudformation delete-stack --stack-name autodoc-control-plane-opencode-workloads --region ca-central-1 --profile autodoc-prod 2>&1)",
+      "Bash(aws route53 *)",
+      "Bash(aws apigateway *)",
+      "Bash(aws cognito-idp *)",
+      "Bash(vercel domains *)",
+      "Bash(vercel ls *)",
+      "PowerShell(aws logs tail '/aws/lambda/opencode_session_start' --since 5m --region ca-central-1 --profile autodoc-prod 2>&1)",
+      "PowerShell(aws ssm get-parameter --name /autodoc/opencode/alb_dns_name --profile autodoc-prod --region ca-central-1 --query 'Parameter.Value' --output text)"
     ]
   }
 }
