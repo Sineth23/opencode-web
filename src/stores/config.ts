@@ -21,14 +21,12 @@ export interface CognitoSettings {
 
 interface Config {
   apiEndpoint: string;
-  albUrl: string;
   theme: Theme;
   cognito?: CognitoSettings;
 }
 
 const defaultConfig: Config = {
   apiEndpoint: '',
-  albUrl: '',
   theme: 'dark',
 };
 
@@ -63,10 +61,6 @@ function loadConfig(): Config {
   const fromEnv = (import.meta as any).env?.VITE_API_DEFAULT as string | undefined;
   if (!cfg.apiEndpoint && fromEnv) {
     cfg = { ...cfg, apiEndpoint: fromEnv };
-  }
-  const albUrl = (import.meta as any).env?.VITE_OPENCODE_ALB_URL as string | undefined;
-  if (!cfg.albUrl && albUrl) {
-    cfg = { ...cfg, albUrl };
   }
   cfg.cognito = loadCognitoConfig();
   return cfg;
