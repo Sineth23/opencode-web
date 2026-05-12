@@ -44,10 +44,20 @@ function AppContent() {
           console.log("[App] Parsed sessions:", sessions);
 
           if (sessions.length > 0) {
-            // Show first session
-            console.log("[App] Opening first session:", sessions[0]);
-            setViewingSessionId(sessions[0].id);
-            return;
+            // Only use sessions created in the last 10 minutes (skip stale sessions)
+            const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+            const recentSessions = sessions.filter(s => {
+              const createdTime = s.time?.created ? (typeof s.time.created === 'string' ? new Date(s.time.created).getTime() : s.time.created) : 0;
+              return createdTime > tenMinutesAgo;
+            });
+
+            if (recentSessions.length > 0) {
+              console.log("[App] Found recent session, using most recent:", recentSessions[0]);
+              setViewingSessionId(recentSessions[0].id);
+              return;
+            } else {
+              console.log("[App] Found sessions but all are stale (>10 min old), creating new one");
+            }
           }
         } catch (e) {
           console.log("[App] Could not load sessions, will create new one:", e);
