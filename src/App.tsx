@@ -11,6 +11,7 @@ interface Session {
   title: string;
   status?: string;
   time: { created: number; updated: number };
+  albUrl?: string;
 }
 
 function AppContent() {
@@ -20,7 +21,7 @@ function AppContent() {
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [isAutoCreating, setIsAutoCreating] = createSignal(false);
-  const [viewingSessionId, setViewingSessionId] = createSignal<string | null>(null);
+  const [viewingSession, setViewingSession] = createSignal<Session | null>(null);
 
   onMount(async () => {
     const endpoint = config().apiEndpoint;
@@ -53,7 +54,7 @@ function AppContent() {
 
             if (recentSessions.length > 0) {
               console.log("[App] Found recent session, using most recent:", recentSessions[0]);
-              setViewingSessionId(recentSessions[0].id);
+              setViewingSession(recentSessions[0]);
               return;
             } else {
               console.log("[App] Found sessions but all are stale (>10 min old), creating new one");
@@ -76,7 +77,7 @@ function AppContent() {
             const sessionId = session.id || session.sessionId;
             console.log("[App] Session created with ID:", sessionId);
             // Show the new session
-            setViewingSessionId(sessionId);
+            setViewingSession(session as Session);
             return;
           } else {
             console.error("[App] Session response missing id/sessionId:", session);
@@ -138,7 +139,10 @@ function AppContent() {
 
   const handleSelectSession = (sessionId: string) => {
     console.log("[App] Viewing session:", sessionId);
-    setViewingSessionId(sessionId);
+    const session = sessions().find(s => s.id === sessionId);
+    if (session) {
+      setViewingSession(session);
+    }
   };
 
   const handleLogout = () => {
@@ -148,7 +152,7 @@ function AppContent() {
 
   return (
     <Show
-      when={viewingSessionId()}
+      when={viewingSession()}
       fallback={
         <div class="h-screen flex items-center justify-center bg-base-200">
           <Show
@@ -248,11 +252,12 @@ function AppContent() {
     >
       <div class="h-screen w-full bg-base-200">
         <SessionViewer
-          sessionId={viewingSessionId()!}
+          sessionId={viewingSession()!.id}
           endpoint={config().apiEndpoint}
+          albUrl={viewingSession()?.albUrl}
           onClose={() => {
             console.log("[App] Closing session viewer");
-            setViewingSessionId(null);
+            setViewingSession(null);
           }}
         />
       </div>

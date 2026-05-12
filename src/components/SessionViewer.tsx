@@ -3,6 +3,7 @@ import { Show, createSignal, onMount } from "solid-js";
 export interface SessionViewerProps {
   sessionId: string;
   endpoint: string;
+  albUrl?: string;
   onClose: () => void;
 }
 
@@ -14,8 +15,14 @@ export function SessionViewer(props: SessionViewerProps) {
   onMount(() => {
     const checkSessionReady = async () => {
       try {
-        console.log(`[SessionViewer] Checking if session ${props.sessionId} is ready`);
-        const response = await fetch(`${props.endpoint}/opencode/${props.sessionId}`, {
+        // Use ALB directly if available, otherwise use API Gateway proxy
+        const baseUrl = props.albUrl || props.endpoint;
+        const checkUrl = props.albUrl
+          ? `${props.albUrl}/?sessionId=${props.sessionId}`
+          : `${props.endpoint}/opencode/${props.sessionId}`;
+
+        console.log(`[SessionViewer] Checking if session ${props.sessionId} is ready (${baseUrl ? 'ALB' : 'API Gateway'})`);
+        const response = await fetch(checkUrl, {
           method: "HEAD",
           headers: { "Accept": "text/html" },
         });
@@ -71,7 +78,9 @@ export function SessionViewer(props: SessionViewerProps) {
             </button>
           </div>
           <iframe
-            src={`${props.endpoint}/opencode/${props.sessionId}`}
+            src={props.albUrl
+              ? `${props.albUrl}/?sessionId=${props.sessionId}`
+              : `${props.endpoint}/opencode/${props.sessionId}`}
             class="flex-1 w-full border-0"
             title="OpenCode Session"
           />
