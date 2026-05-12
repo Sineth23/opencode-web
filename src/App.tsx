@@ -76,7 +76,12 @@ function AppContent() {
           if (session && (session.id || session.sessionId)) {
             const sessionId = session.id || session.sessionId;
             console.log("[App] Session created with ID:", sessionId);
-            // Show the new session
+            // Redirect directly to ALB if available, otherwise show in iframe
+            if ((session as any).albUrl) {
+              console.log("[App] Redirecting to ALB:", (session as any).albUrl);
+              window.location.href = `${(session as any).albUrl}/?sessionId=${sessionId}`;
+              return;
+            }
             setViewingSession(session as Session);
             return;
           } else {
@@ -138,9 +143,12 @@ function AppContent() {
   };
 
   const handleSelectSession = (sessionId: string) => {
-    console.log("[App] Viewing session:", sessionId);
+    console.log("[App] Opening session:", sessionId);
     const session = sessions().find(s => s.id === sessionId);
-    if (session) {
+    if (session && (session as any).albUrl) {
+      console.log("[App] Redirecting to ALB:", (session as any).albUrl);
+      window.location.href = `${(session as any).albUrl}/?sessionId=${sessionId}`;
+    } else if (session) {
       setViewingSession(session);
     }
   };
