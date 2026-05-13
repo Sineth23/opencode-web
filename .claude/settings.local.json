@@ -276,7 +276,12 @@
       "Bash(vercel domains *)",
       "Bash(vercel ls *)",
       "PowerShell(aws logs tail '/aws/lambda/opencode_session_start' --since 5m --region ca-central-1 --profile autodoc-prod 2>&1)",
-      "PowerShell(aws ssm get-parameter --name /autodoc/opencode/alb_dns_name --profile autodoc-prod --region ca-central-1 --query 'Parameter.Value' --output text)"
+      "PowerShell(aws ssm get-parameter --name /autodoc/opencode/alb_dns_name --profile autodoc-prod --region ca-central-1 --query 'Parameter.Value' --output text)",
+      "Bash(git checkout *)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\docs\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
     ]
   }
 }
