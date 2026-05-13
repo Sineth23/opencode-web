@@ -281,7 +281,12 @@
       "Bash(mkdir -p \"C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\docs\")",
       "Bash(MSYS_NO_PATHCONV=1 aws logs filter-log-events --log-group-name \"/aws/lambda/autodoc-control-plane-api-OpencodeSessionStartFn0C-WysfSNoFMoXE\" --profile autodoc-prod --query \"events[*].message\" --output text)",
       "PowerShell(aws lambda get-function-configuration --function-name autodoc-control-plane-api-OpencodeSessionStartFn0C-WysfSNoFMoXE --profile autodoc-prod --region ca-central-1 --query \"Environment.Variables.{JOBS_TABLE:JOBS_TABLE,USER_TENANTS_TABLE:USER_TENANTS_TABLE}\" 2>&1)",
-      "PowerShell(aws dynamodb scan --table-name \"autodoc-control-plane-data-UserTenantsTable0D4F7C51-1QBBWE9ADJJ9A\" --profile autodoc-prod --region ca-central-1 2>&1)"
+      "PowerShell(aws dynamodb scan --table-name \"autodoc-control-plane-data-UserTenantsTable0D4F7C51-1QBBWE9ADJJ9A\" --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(python C:\\\\Users\\\\Sineth\\\\check_sessions.py 2>&1)",
+      "PowerShell(python C:\\\\Users\\\\Sineth\\\\cleanup_stale.py 2>&1)",
+      "PowerShell(python C:\\\\Users\\\\Sineth\\\\check_task.py 2>&1)",
+      "PowerShell(python C:\\\\Users\\\\Sineth\\\\check_container_logs.py 2>&1)",
+      "PowerShell(python C:\\\\Users\\\\Sineth\\\\fix_trust_policies.py 2>&1)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"

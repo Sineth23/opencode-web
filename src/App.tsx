@@ -202,7 +202,7 @@ function Dashboard() {
             <Show when={phase() === "running"}>
               <div class="w-full flex gap-2">
                 <a
-                  href={albUrl}
+                  href={`${albUrl}/connect?session=${sessionId()}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn btn-success flex-1"
