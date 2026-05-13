@@ -4,6 +4,7 @@ import { clearAuthState } from "./utils/cognito";
 import { config } from "./stores/config";
 
 const SESSION_KEY = "autodoc_opencode_session_id";
+const PASSWORD_KEY = "autodoc_opencode_session_password";
 
 type Phase = "idle" | "starting" | "running" | "stopping" | "error";
 
@@ -31,6 +32,10 @@ function Dashboard() {
   const [phase, setPhase] = createSignal<Phase>("idle");
   const [sessionId, setSessionId] = createSignal<string | null>(null);
   const [errorMsg, setErrorMsg] = createSignal("");
+  const [password, setPassword] = createSignal<string | null>(
+    localStorage.getItem(PASSWORD_KEY)
+  );
+  const [copied, setCopied] = createSignal(false);
 
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -44,7 +49,9 @@ function Dashboard() {
   const handleSessionEnded = () => {
     stopPolling();
     setSessionId(null);
+    setPassword(null);
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(PASSWORD_KEY);
     setPhase("idle");
   };
 
@@ -103,8 +110,11 @@ function Dashboard() {
         return;
       }
       const sid: string = data.sessionId;
+      const pw: string = data.password ?? "";
       setSessionId(sid);
+      setPassword(pw);
       localStorage.setItem(SESSION_KEY, sid);
+      if (pw) localStorage.setItem(PASSWORD_KEY, pw);
       startPolling(sid);
     } catch (e: any) {
       setPhase("error");
@@ -124,6 +134,15 @@ function Dashboard() {
       }
     }
     handleSessionEnded();
+  };
+
+  const handleCopyPassword = () => {
+    const pw = password();
+    if (!pw) return;
+    navigator.clipboard.writeText(pw).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleLogout = async () => {
@@ -181,14 +200,36 @@ function Dashboard() {
             </Show>
 
             <Show when={phase() === "running"}>
-              <a
-                href={albUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="btn btn-success w-full"
-              >
-                Open OpenCode ↗
-              </a>
+              <div class="w-full flex gap-2">
+                <a
+                  href={albUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn btn-success flex-1"
+                >
+                  Open OpenCode ↗
+                </a>
+                <Show when={password()}>
+                  <button
+                    class="btn btn-outline btn-success"
+                    onClick={handleCopyPassword}
+                    title="Copy session password"
+                  >
+                    {copied() ? "✓" : "🔑"}
+                  </button>
+                </Show>
+              </div>
+              <Show when={password()}>
+                <div class="w-full bg-base-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                  <span class="text-xs text-base-content/50 font-mono truncate">{password()}</span>
+                  <button
+                    class="btn btn-ghost btn-xs shrink-0"
+                    onClick={handleCopyPassword}
+                  >
+                    {copied() ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </Show>
               <button
                 class="btn btn-error btn-outline w-full"
                 onClick={handleStop}
