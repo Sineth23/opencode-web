@@ -7,7 +7,10 @@ const SESSION_KEY = "autodoc_opencode_session_id";
 
 type Phase = "idle" | "starting" | "running" | "stopping" | "error";
 
-const API_URL = (import.meta as any).env?.VITE_AUTODOC_API_URL as string ?? "";
+const API_URL: string =
+  import.meta.env.VITE_AUTODOC_API_URL ||
+  "https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com";
+console.log("[autodoc] API_URL:", API_URL);
 
 function apiFetch(path: string, method: string, body?: object) {
   const token = localStorage.getItem("cognito_id_token");
