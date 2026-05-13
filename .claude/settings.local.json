@@ -286,7 +286,11 @@
       "PowerShell(python C:\\\\Users\\\\Sineth\\\\cleanup_stale.py 2>&1)",
       "PowerShell(python C:\\\\Users\\\\Sineth\\\\check_task.py 2>&1)",
       "PowerShell(python C:\\\\Users\\\\Sineth\\\\check_container_logs.py 2>&1)",
-      "PowerShell(python C:\\\\Users\\\\Sineth\\\\fix_trust_policies.py 2>&1)"
+      "PowerShell(python C:\\\\Users\\\\Sineth\\\\fix_trust_policies.py 2>&1)",
+      "PowerShell(aws ecs list-tasks --cluster autodoc-control-plane-opencode-workloads-OpencodeCluster857F7B2F-JhNhqRm8pvxE --desired-status RUNNING --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(aws ecs list-clusters --profile autodoc-prod --region ca-central-1 --output json 2>&1)",
+      "PowerShell(aws ecs list-tasks --cluster autodoc-cluster --desired-status RUNNING --profile autodoc-prod --region ca-central-1 --output json 2>&1)",
+      "PowerShell(aws ecs describe-tasks --cluster autodoc-cluster --tasks 420f7634107e44e496c5b2b31a15def6 --profile autodoc-prod --region ca-central-1 --query 'tasks[0].{lastStatus:lastStatus,taskArn:taskArn,containers:containers[0].{name:name,runtimeId:runtimeId,lastStatus:lastStatus}}' --output json 2>&1)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
