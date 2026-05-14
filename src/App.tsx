@@ -202,7 +202,13 @@ function Dashboard() {
             <Show when={phase() === "running"}>
               <div class="w-full flex gap-2">
                 <a
-                  href={`${albUrl}/connect?session=${sessionId()}`}
+                  href={(() => {
+                    const url = new URL(`${albUrl}/connect`);
+                    url.username = "opencode";
+                    url.password = password() ?? "";
+                    url.searchParams.set("session", sessionId() ?? "");
+                    return url.toString();
+                  })()}
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn btn-success flex-1"
