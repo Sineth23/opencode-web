@@ -290,7 +290,10 @@
       "PowerShell(aws ecs list-tasks --cluster autodoc-control-plane-opencode-workloads-OpencodeCluster857F7B2F-JhNhqRm8pvxE --desired-status RUNNING --profile autodoc-prod --region ca-central-1 2>&1)",
       "PowerShell(aws ecs list-clusters --profile autodoc-prod --region ca-central-1 --output json 2>&1)",
       "PowerShell(aws ecs list-tasks --cluster autodoc-cluster --desired-status RUNNING --profile autodoc-prod --region ca-central-1 --output json 2>&1)",
-      "PowerShell(aws ecs describe-tasks --cluster autodoc-cluster --tasks 420f7634107e44e496c5b2b31a15def6 --profile autodoc-prod --region ca-central-1 --query 'tasks[0].{lastStatus:lastStatus,taskArn:taskArn,containers:containers[0].{name:name,runtimeId:runtimeId,lastStatus:lastStatus}}' --output json 2>&1)"
+      "PowerShell(aws ecs describe-tasks --cluster autodoc-cluster --tasks 420f7634107e44e496c5b2b31a15def6 --profile autodoc-prod --region ca-central-1 --query 'tasks[0].{lastStatus:lastStatus,taskArn:taskArn,containers:containers[0].{name:name,runtimeId:runtimeId,lastStatus:lastStatus}}' --output json 2>&1)",
+      "PowerShell(aws ssm get-parameter --name /autodoc/opencode/alb_dns_name --profile autodoc-prod --region ca-central-1 --query Parameter.Value --output text 2>&1)",
+      "PowerShell(aws acm describe-certificate --certificate-arn arn:aws:acm:ca-central-1:675344693717:certificate/afccd27e-b338-401d-b4f4-d6f3fead372b --profile autodoc-prod --region ca-central-1 --query 'Certificate.{Domain:DomainName,Status:Status,ValidationOptions:DomainValidationOptions}' --output json 2>&1)",
+      "PowerShell(aws route53 list-hosted-zones --profile autodoc-prod --output json 2>&1)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"

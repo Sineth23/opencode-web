@@ -2,7 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "env": {
-    "VITE_OPENCODE_ALB_URL": "http://autodoc-opencode-alb-1424128421.ca-central-1.elb.amazonaws.com",
+    "VITE_OPENCODE_ALB_URL": "https://workspace.autodocai.io",
     "VITE_AUTODOC_API_URL": "https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com",
     "VITE_COGNITO_CLIENT_ID": "5hbjt7mmj7f1ninb7l7q6eq79v",
     "VITE_COGNITO_USER_POOL_ID": "ca-central-1_BSotcgUgw",
