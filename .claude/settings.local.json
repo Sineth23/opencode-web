@@ -293,7 +293,9 @@
       "PowerShell(aws ecs describe-tasks --cluster autodoc-cluster --tasks 420f7634107e44e496c5b2b31a15def6 --profile autodoc-prod --region ca-central-1 --query 'tasks[0].{lastStatus:lastStatus,taskArn:taskArn,containers:containers[0].{name:name,runtimeId:runtimeId,lastStatus:lastStatus}}' --output json 2>&1)",
       "PowerShell(aws ssm get-parameter --name /autodoc/opencode/alb_dns_name --profile autodoc-prod --region ca-central-1 --query Parameter.Value --output text 2>&1)",
       "PowerShell(aws acm describe-certificate --certificate-arn arn:aws:acm:ca-central-1:675344693717:certificate/afccd27e-b338-401d-b4f4-d6f3fead372b --profile autodoc-prod --region ca-central-1 --query 'Certificate.{Domain:DomainName,Status:Status,ValidationOptions:DomainValidationOptions}' --output json 2>&1)",
-      "PowerShell(aws route53 list-hosted-zones --profile autodoc-prod --output json 2>&1)"
+      "PowerShell(aws route53 list-hosted-zones --profile autodoc-prod --output json 2>&1)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\" http://workspace.autodocai.io --max-time 10)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://workspace.autodocai.io --max-time 10)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
