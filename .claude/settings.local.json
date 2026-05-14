@@ -295,7 +295,12 @@
       "PowerShell(aws acm describe-certificate --certificate-arn arn:aws:acm:ca-central-1:675344693717:certificate/afccd27e-b338-401d-b4f4-d6f3fead372b --profile autodoc-prod --region ca-central-1 --query 'Certificate.{Domain:DomainName,Status:Status,ValidationOptions:DomainValidationOptions}' --output json 2>&1)",
       "PowerShell(aws route53 list-hosted-zones --profile autodoc-prod --output json 2>&1)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\" http://workspace.autodocai.io --max-time 10)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://workspace.autodocai.io --max-time 10)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://workspace.autodocai.io --max-time 10)",
+      "PowerShell(aws ecs describe-tasks --cluster autodoc-cluster --tasks 7e277a809d204e318bac9eedbf896582 --profile autodoc-prod --region ca-central-1 --query 'tasks[0].{lastStatus:lastStatus,healthStatus:healthStatus,stoppedReason:stoppedReason,containers:containers[0].{name:name,lastStatus:lastStatus,exitCode:exitCode,reason:reason}}' --output json 2>&1)",
+      "PowerShell(aws dynamodb scan --table-name autodoc-jobs --filter-expression \"#t = :t AND #s IN \\(:r, :s\\)\" --expression-attribute-names '{\"#t\":\"type\",\"#s\":\"status\"}' --expression-attribute-values '{\":t\":{\"S\":\"opencode_session\"},\":r\":{\"S\":\"RUNNING\"},\":s\":{\"S\":\"SUBMITTED\"}}' --projection-expression \"jobId,tenantId,#s,createdAt,taskArn\" --profile autodoc-prod --region ca-central-1 --output json 2>&1)",
+      "PowerShell(python -c \"import json,sys; items=json.load\\(sys.stdin\\)['Items']; [print\\(json.dumps\\({k:list\\(v.values\\(\\)\\)[0] for k,v in i.items\\(\\)}\\)\\) for i in items]\")",
+      "PowerShell(aws logs tail /aws/lambda/autodoc-control-plane-api-OpencodeSessionStartFn0C-WysfSNoFMoXE --since 10m --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(aws dynamodb list-tables --profile autodoc-prod --region ca-central-1 --query 'TableNames' --output json 2>&1)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"

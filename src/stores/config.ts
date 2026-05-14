@@ -55,25 +55,27 @@ function loadConfig(): Config {
   let cfg = defaultConfig;
   if (stored) {
     try {
-      cfg = { ...defaultConfig, ...JSON.parse(stored) };
+      // Only restore user preferences (theme) — not build-time values
+      const parsed = JSON.parse(stored);
+      cfg = { ...defaultConfig, theme: parsed.theme ?? defaultConfig.theme };
     } catch (e) {
       console.error('Failed to parse stored config:', e);
     }
   }
+  // Build-time env vars always win — never read these from localStorage
   const fromEnv = (import.meta as any).env?.VITE_API_DEFAULT as string | undefined;
-  if (!cfg.apiEndpoint && fromEnv) {
-    cfg = { ...cfg, apiEndpoint: fromEnv };
-  }
+  if (fromEnv) cfg = { ...cfg, apiEndpoint: fromEnv };
+
   const albUrl = (import.meta as any).env?.VITE_OPENCODE_ALB_URL as string | undefined;
-  if (!cfg.albUrl && albUrl) {
-    cfg = { ...cfg, albUrl };
-  }
+  if (albUrl) cfg = { ...cfg, albUrl };
+
   cfg.cognito = loadCognitoConfig();
   return cfg;
 }
 
 function saveConfig(config: Config) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  // Only persist user preferences — not build-time values
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: config.theme }));
 }
 
 export const [config, setConfig] = createSignal<Config>(loadConfig());
