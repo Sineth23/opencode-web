@@ -66,7 +66,7 @@ function loadConfig(): Config {
   const fromEnv = (import.meta as any).env?.VITE_API_DEFAULT as string | undefined;
   if (fromEnv) cfg = { ...cfg, apiEndpoint: fromEnv };
 
-  const albUrl = (import.meta as any).env?.VITE_OPENCODE_ALB_URL as string | undefined;
+  const albUrl = ((import.meta as any).env?.VITE_OPENCODE_ALB_URL as string | undefined)?.replace(/^﻿/, '').trim();
   if (albUrl) cfg = { ...cfg, albUrl };
 
   cfg.cognito = loadCognitoConfig();
