@@ -33,7 +33,7 @@ function Dashboard() {
   const [sessionId, setSessionId] = createSignal<string | null>(null);
   const [errorMsg, setErrorMsg] = createSignal("");
   const [password, setPassword] = createSignal<string | null>(
-    localStorage.getItem(PASSWORD_KEY)
+    sessionStorage.getItem(PASSWORD_KEY)
   );
   const [copied, setCopied] = createSignal(false);
 
@@ -51,7 +51,7 @@ function Dashboard() {
     setSessionId(null);
     setPassword(null);
     localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(PASSWORD_KEY);
+    sessionStorage.removeItem(PASSWORD_KEY);
     setPhase("idle");
   };
 
@@ -114,7 +114,7 @@ function Dashboard() {
       setSessionId(sid);
       setPassword(pw);
       localStorage.setItem(SESSION_KEY, sid);
-      if (pw) localStorage.setItem(PASSWORD_KEY, pw);
+      if (pw) sessionStorage.setItem(PASSWORD_KEY, pw);
       startPolling(sid);
     } catch (e: any) {
       setPhase("error");
