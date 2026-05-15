@@ -301,7 +301,14 @@
       "PowerShell(python -c \"import json,sys; items=json.load\\(sys.stdin\\)['Items']; [print\\(json.dumps\\({k:list\\(v.values\\(\\)\\)[0] for k,v in i.items\\(\\)}\\)\\) for i in items]\")",
       "PowerShell(aws logs tail /aws/lambda/autodoc-control-plane-api-OpencodeSessionStartFn0C-WysfSNoFMoXE --since 10m --profile autodoc-prod --region ca-central-1 2>&1)",
       "PowerShell(aws dynamodb list-tables --profile autodoc-prod --region ca-central-1 --query 'TableNames' --output json 2>&1)",
-      "Bash(vercel env *)"
+      "Bash(vercel env *)",
+      "Bash(npx vercel *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Sineth\\\\opencode\\\\packages\\\\app\\\\src\" -Recurse -Force)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(xargs grep -l \"tailwind\")",
+      "Bash(grep -v \"^$\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
