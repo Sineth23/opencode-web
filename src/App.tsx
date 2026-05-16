@@ -195,10 +195,10 @@ function Dashboard() {
       </div>
 
       {/* Tab content */}
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto flex flex-col">
         {/* Session Tab */}
         <Show when={tab() === "session"}>
-          <div class="flex items-center justify-center min-h-full p-6">
+          <div class="flex-1 flex items-center justify-center p-6">
             <div class="card w-96 bg-base-100 shadow-xl">
               <div class="card-body items-center text-center gap-3">
                 <img src="/images/autodoc-logo.svg" alt="AutoDoc" class="h-12" />
@@ -307,7 +307,7 @@ function Dashboard() {
 
         {/* Files Tab */}
         <Show when={tab() === "files"}>
-          <div class="p-4 h-full flex flex-col">
+          <div class="flex-1 p-4 flex flex-col">
             <Show when={phase() !== "running"}>
               <div class="alert alert-info mb-4 text-sm">
                 <span>
