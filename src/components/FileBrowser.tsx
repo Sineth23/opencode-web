@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show, onMount } from "solid-js";
 import { marked } from "marked";
 
 const API_URL: string =
@@ -17,14 +17,6 @@ function apiFetch(path: string, method = "GET", body?: object) {
   }).then((r) => r.json());
 }
 
-const TOP_FOLDERS = [
-  { label: "Repos", prefix: "repos/" },
-  { label: "Evidence", prefix: "evidence/" },
-  { label: "Reports", prefix: "reports/" },
-  { label: "PM", prefix: "pm/" },
-  { label: "Timesheets", prefix: "timesheets/" },
-  { label: "Consultation", prefix: "consultation/" },
-];
 
 interface Folder {
   prefix: string;
@@ -65,8 +57,8 @@ function renderContent(key: string, content: string): string {
 }
 
 export default function FileBrowser(props: FileBrowserProps) {
-  const [rootPrefix, setRootPrefix] = createSignal("repos/");
-  const [prefix, setPrefix] = createSignal("repos/");
+  const [prefix, setPrefix] = createSignal("");
+  const [rootFolders, setRootFolders] = createSignal<Folder[]>([]);
   const [folders, setFolders] = createSignal<Folder[]>([]);
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
@@ -94,6 +86,7 @@ export default function FileBrowser(props: FileBrowserProps) {
       if (!data.ok) throw new Error(data.error || "Failed to list files");
       setFolders(data.folders || []);
       setFiles(data.files || []);
+      if (p === "") setRootFolders(data.folders || []);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -106,10 +99,7 @@ export default function FileBrowser(props: FileBrowserProps) {
     listFolder(p);
   };
 
-  const selectTopFolder = (p: string) => {
-    setRootPrefix(p);
-    navigate(p);
-  };
+  onMount(() => listFolder(""));
 
   const openFile = async (key: string) => {
     setSelectedKey(key);
@@ -155,19 +145,29 @@ export default function FileBrowser(props: FileBrowserProps) {
 
   return (
     <div class="flex flex-col gap-4 h-full">
-      {/* Top folder selector */}
+      {/* Top folder selector — populated from root listing */}
       <div class="flex gap-2 flex-wrap">
-        <For each={TOP_FOLDERS}>
+        <button
+          class="btn btn-sm"
+          classList={{
+            "btn-primary": prefix() === "",
+            "btn-ghost": prefix() !== "",
+          }}
+          onClick={() => navigate("")}
+        >
+          Root
+        </button>
+        <For each={rootFolders()}>
           {(f) => (
             <button
               class="btn btn-sm"
               classList={{
-                "btn-primary": rootPrefix() === f.prefix,
-                "btn-ghost": rootPrefix() !== f.prefix,
+                "btn-primary": prefix().startsWith(f.prefix),
+                "btn-ghost": !prefix().startsWith(f.prefix),
               }}
-              onClick={() => selectTopFolder(f.prefix)}
+              onClick={() => navigate(f.prefix)}
             >
-              {f.label}
+              {f.name}
             </button>
           )}
         </For>
@@ -177,7 +177,7 @@ export default function FileBrowser(props: FileBrowserProps) {
       <div class="breadcrumbs text-sm bg-base-100 rounded-box px-4 py-2">
         <ul>
           <li>
-            <button class="link" onClick={() => navigate(rootPrefix())}>
+            <button class="link" onClick={() => navigate("")}>
               Root
             </button>
           </li>
