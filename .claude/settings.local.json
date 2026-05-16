@@ -309,7 +309,9 @@
       "Bash(Format-Table -AutoSize)",
       "Bash(xargs grep -l \"tailwind\")",
       "Bash(grep -v \"^$\")",
-      "Bash(cdk list *)"
+      "Bash(cdk list *)",
+      "Bash(dir \"C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\stacks\" /b)",
+      "Bash(npx tsc *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
