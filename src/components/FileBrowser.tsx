@@ -57,7 +57,7 @@ function renderContent(key: string, content: string): string {
 }
 
 export default function FileBrowser(props: FileBrowserProps) {
-  const [prefix, setPrefix] = createSignal("");
+  const [prefix, setPrefix] = createSignal("projects/");
   const [rootFolders, setRootFolders] = createSignal<Folder[]>([]);
   const [folders, setFolders] = createSignal<Folder[]>([]);
   const [files, setFiles] = createSignal<FileItem[]>([]);
@@ -86,7 +86,7 @@ export default function FileBrowser(props: FileBrowserProps) {
       if (!data.ok) throw new Error(data.error || "Failed to list files");
       setFolders(data.folders || []);
       setFiles(data.files || []);
-      if (p === "") setRootFolders(data.folders || []);
+      if (p === "projects/" || p === "repos/") setRootFolders(prev => prev);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -99,7 +99,7 @@ export default function FileBrowser(props: FileBrowserProps) {
     listFolder(p);
   };
 
-  onMount(() => listFolder(""));
+  onMount(() => listFolder("projects/"));
 
   const openFile = async (key: string) => {
     setSelectedKey(key);
@@ -145,40 +145,28 @@ export default function FileBrowser(props: FileBrowserProps) {
 
   return (
     <div class="flex flex-col gap-4 h-full">
-      {/* Top folder selector — populated from root listing */}
+      {/* Top folder selector */}
       <div class="flex gap-2 flex-wrap">
-        <button
-          class="btn btn-sm"
-          classList={{
-            "btn-primary": prefix() === "",
-            "btn-ghost": prefix() !== "",
-          }}
-          onClick={() => navigate("")}
-        >
-          Root
-        </button>
-        <For each={rootFolders()}>
-          {(f) => (
-            <button
-              class="btn btn-sm"
-              classList={{
-                "btn-primary": prefix().startsWith(f.prefix),
-                "btn-ghost": !prefix().startsWith(f.prefix),
-              }}
-              onClick={() => navigate(f.prefix)}
-            >
-              {f.name}
-            </button>
-          )}
-        </For>
+        {[{ label: "Projects", prefix: "projects/" }, { label: "Repos", prefix: "repos/" }].map((f) => (
+          <button
+            class="btn btn-sm"
+            classList={{
+              "btn-primary": prefix().startsWith(f.prefix),
+              "btn-ghost": !prefix().startsWith(f.prefix),
+            }}
+            onClick={() => navigate(f.prefix)}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {/* Breadcrumb */}
       <div class="breadcrumbs text-sm bg-base-100 rounded-box px-4 py-2">
         <ul>
           <li>
-            <button class="link" onClick={() => navigate("")}>
-              Root
+            <button class="link" onClick={() => navigate("projects/")}>
+              Projects
             </button>
           </li>
           <For each={breadcrumbs()}>
