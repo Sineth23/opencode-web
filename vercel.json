@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "outputDirectory": ".next",
   "env": {
     "NEXT_PUBLIC_ALB_URL": "https://workspace.autodocai.io",
     "NEXT_PUBLIC_CDK_API_URL": "https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com",
