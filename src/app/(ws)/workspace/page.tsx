@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowTopRightOnSquareIcon, KeyIcon, StopIcon, PlayIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline'
 import { cognitoGetIdToken } from '@/lib/cognito'
 
-const SESSION_KEY = 'autodoc_opencode_session_id'
-const PASSWORD_KEY = 'autodoc_opencode_session_password'
+const SESSION_KEY = 'autodoc_workspace_session_id'
+const PASSWORD_KEY = 'autodoc_workspace_session_password'
 const ALB_URL = process.env.NEXT_PUBLIC_ALB_URL || ''
 const API_URL = process.env.NEXT_PUBLIC_CDK_API_URL || 'https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com'
 
@@ -144,7 +144,7 @@ export default function WorkspacePage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">AI Workspace</h1>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          Launch an OpenCode session to start an AI-powered coding environment.
+          Launch an AI-powered coding environment directly in your browser.
         </p>
       </div>
 
@@ -216,7 +216,7 @@ export default function WorkspacePage() {
               className="flex items-center justify-center gap-2 w-full bg-primary text-white py-2.5 px-4 rounded-lg font-medium hover:bg-primary-dark transition-colors"
             >
               <PlayIcon className="h-4 w-4" />
-              Launch OpenCode
+              Launch Workspace
             </button>
           )}
 
@@ -228,7 +228,7 @@ export default function WorkspacePage() {
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full bg-green-600 text-white py-2.5 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors"
               >
-                Open OpenCode
+                Open Workspace
                 <ArrowTopRightOnSquareIcon className="h-4 w-4" />
               </a>
               {password && (
@@ -265,9 +265,9 @@ export default function WorkspacePage() {
       <div className="bg-[var(--color-bg-secondary)] rounded-xl border border-[var(--color-border)] p-5 space-y-2">
         <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">How it works</h3>
         <ul className="text-sm text-[var(--color-text-secondary)] space-y-1.5">
-          <li className="flex gap-2"><span className="text-primary font-medium">1.</span> Click <strong>Launch OpenCode</strong> to provision your AI coding environment.</li>
+          <li className="flex gap-2"><span className="text-primary font-medium">1.</span> Click <strong>Launch Workspace</strong> to provision your AI coding environment.</li>
           <li className="flex gap-2"><span className="text-primary font-medium">2.</span> Wait ~30 seconds for the workspace to start.</li>
-          <li className="flex gap-2"><span className="text-primary font-medium">3.</span> Click <strong>Open OpenCode</strong> and enter the displayed password when prompted.</li>
+          <li className="flex gap-2"><span className="text-primary font-medium">3.</span> Click <strong>Open Workspace</strong> and enter the displayed password when prompted.</li>
           <li className="flex gap-2"><span className="text-primary font-medium">4.</span> Stop the session when done to free up resources.</li>
         </ul>
       </div>
