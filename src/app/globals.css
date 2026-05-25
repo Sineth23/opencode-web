@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '../styles/design-tokens.css';
+
+body {
+  @apply antialiased text-gray-900 bg-[var(--color-bg-secondary)];
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+@keyframes assistant-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes pk-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@layer components {
+  .pk-skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-bg-tertiary) 25%,
+      var(--color-border) 50%,
+      var(--color-bg-tertiary) 75%
+    );
+    background-size: 400% 100%;
+    animation: pk-shimmer 1.8s ease infinite;
+    border-radius: var(--radius-md);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pk-skeleton {
+      animation: none;
+      background: var(--color-bg-tertiary);
+    }
+  }
+}
+
+@layer components {
+  .pk-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .pk-card {
+    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] shadow-sm;
+  }
+
+  .pk-btn-primary {
+    @apply inline-flex items-center justify-center rounded-[var(--radius-md)] bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+
+  .pk-btn-secondary {
+    @apply inline-flex items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] shadow-sm transition-colors hover:bg-[var(--color-surface-hover)] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+}
