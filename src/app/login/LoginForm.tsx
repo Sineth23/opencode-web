@@ -86,7 +86,7 @@ export default function LoginForm() {
 
   return (
     <div className="min-h-screen flex bg-[var(--color-bg-secondary)]">
-      <div className="hidden lg:flex lg:w-[46%] xl:w-[42%] relative flex-col justify-between p-10 xl:p-14 bg-gradient-to-br from-primary via-[#243a7a] to-primary-dark text-white overflow-hidden">
+      <div className="hidden lg:flex lg:w-[46%] xl:w-[42%] relative flex-col justify-between p-10 xl:p-14 bg-gradient-to-br from-[#1E2F67] via-[#243a7a] to-[#162049] text-white overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.07] pointer-events-none"
           style={{ backgroundImage: 'url(/images/grid.svg)', backgroundSize: 'cover' }}
