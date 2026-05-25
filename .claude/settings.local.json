@@ -332,7 +332,15 @@
       "Bash(Get-ChildItem \"C:\\\\Users\\\\Sineth\\\\opencode-web\" -Name)",
       "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\Sineth\\\\opencode-web\\\\src\\\\app\\\\\\(ws\\)\\\\workspace\")",
       "Bash(git show *)",
-      "PowerShell(cd \"C:\\\\Users\\\\Sineth\\\\opencode-web\"; npm run type-check; echo \"Exit: $LASTEXITCODE\")"
+      "PowerShell(cd \"C:\\\\Users\\\\Sineth\\\\opencode-web\"; npm run type-check; echo \"Exit: $LASTEXITCODE\")",
+      "PowerShell(Get-Content \"$env:APPDATA\\\\..\\\\..\\\\Users\\\\$env:USERNAME\\\\.local\\\\share\\\\com.vercel.cli\\\\auth.json\" 2>&1; Get-Content \"$env:LOCALAPPDATA\\\\@vercel\\\\cli\\\\auth.json\" 2>&1)",
+      "PowerShell(cd \"C:\\\\Users\\\\Sineth\\\\opencode-web\"; vercel whoami 2>&1; cat \"$env:USERPROFILE\\\\.vercel\\\\auth.json\" 2>&1 | Select-Object -First 3)",
+      "PowerShell(cd \"C:\\\\Users\\\\Sineth\\\\opencode-web\"; $token = \\(vercel env pull --yes 2>&1\\); vercel env ls production 2>&1 | Select-Object -First 3)",
+      "PowerShell(vercel --token 2>&1)",
+      "PowerShell($env:VERCEL_TOKEN)",
+      "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\AppData\\\\Local\\\\com.vercel.cli\" -Recurse | Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\AppData\\\\Local\\\\com.vercel.cli\" -Force | Select-Object Name, FullName)",
+      "PowerShell(Get-ChildItem \"$env:LOCALAPPDATA\\\\com.vercel.cli\" -Force -ErrorAction SilentlyContinue | Select-Object Name, Length, Attributes)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
