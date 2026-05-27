@@ -27,6 +27,8 @@ import { useWorkspace } from '@/components/providers/WorkspaceContext'
 import { authorizedFetch } from '@/lib/api'
 import { withSupportContact } from '@/lib/support-copy'
 import { Skeleton } from '@/components/ui/Skeleton'
+import DatasetManager from '@/components/assistant/DatasetManager'
+import { useSuperAdmin } from '@/lib/use-super-admin'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -720,6 +722,7 @@ function DocCanvas({
 
 export default function AssistantPage() {
   const { workspace } = useWorkspace()
+  const { activeTenantId } = useSuperAdmin()
 
   const [threads, setThreads] = useState<Thread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
@@ -1328,6 +1331,11 @@ export default function AssistantPage() {
             )}
           </div>
         )}
+
+        {/* Knowledge bases */}
+        <div className="px-3 pb-2 flex-shrink-0">
+          <DatasetManager activeTenantId={activeTenantId ?? undefined} />
+        </div>
 
         {/* Thread list */}
         <div className="flex-1 overflow-y-auto min-h-0">
