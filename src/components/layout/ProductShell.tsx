@@ -21,6 +21,7 @@ import type { User } from '@supabase/supabase-js'
 import { useWorkspace } from '@/components/providers/WorkspaceContext'
 import PlatformAdminNavLink from '@/components/admin/PlatformAdminNavLink'
 import BackgroundActivityBanner from '@/components/workspace/BackgroundActivityBanner'
+import SuperAdminSwitcher from '@/components/layout/SuperAdminSwitcher'
 
 const allNavItems = [
   { href: '/dashboard', label: 'Overview', icon: HomeIcon, adminOnly: false },
@@ -132,6 +133,8 @@ export default function ProductShell({
             </Link>
           </div>
           <div className="hidden lg:block" />
+          <div className="flex items-center gap-3">
+            <SuperAdminSwitcher />
           <Menu as="div" className="relative">
             <Menu.Button className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 hover:bg-[var(--color-bg-tertiary)]">
               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-sm font-semibold">
@@ -185,6 +188,7 @@ export default function ProductShell({
               </Menu.Items>
             </Transition>
           </Menu>
+          </div>
         </header>
         <BackgroundActivityBanner />
         <main className="relative w-full flex-1 min-h-0 flex flex-col pk-container py-8">{children}</main>

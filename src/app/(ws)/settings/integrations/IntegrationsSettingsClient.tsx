@@ -1,10 +1,12 @@
-'use client'
+﻿'use client'
 
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { authorizedFetch } from '@/lib/api'
+import { cdkGet, cdkPost, cdkDelete } from '@/lib/cdk-api'
+import GitHubRepoWorkflowSection from '@/components/settings/GitHubRepoWorkflowSection'
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, withSupportContact } from '@/lib/support-copy'
 import { useWorkspace } from '@/components/providers/WorkspaceContext'
 import BitbucketSyncSection from '@/components/settings/BitbucketSyncSection'
@@ -13,7 +15,16 @@ import {
   CheckCircleIcon,
   LockClosedIcon,
   SparklesIcon,
+  TrashIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline'
+
+type GhConnection = {
+  connectionId: string
+  displayName: string
+  createdAt: string
+  createdBy: string
+}
 
 type AccessPayload = {
   workspace: { id: string; name: string; billing_plan: string; allowed_integration_slugs: string[] }
@@ -64,6 +75,15 @@ export default function IntegrationsSettingsClient() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  // GitHub connections
+  const [ghConnections, setGhConnections] = useState<GhConnection[]>([])
+  const [ghLoading, setGhLoading] = useState(true)
+  const [ghPat, setGhPat] = useState('')
+  const [ghDisplayName, setGhDisplayName] = useState('')
+  const [ghSaving, setGhSaving] = useState(false)
+  const [ghMsg, setGhMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [ghRevoking, setGhRevoking] = useState<string | null>(null)
+
   useEffect(() => {
     if (searchParams.get('bb') === 'connected') {
       setMsg('Bitbucket connected successfully. It now appears as an active source for your organization.')
@@ -106,6 +126,58 @@ export default function IntegrationsSettingsClient() {
       }
     })()
   }, [workspace?.id])
+
+  const loadGhConnections = useCallback(async () => {
+    setGhLoading(true)
+    try {
+      const data = await cdkGet<{ ok: boolean; connections: GhConnection[] }>('/integrations/github/connections')
+      if (data.ok) setGhConnections(data.connections ?? [])
+    } catch {
+      // non-fatal
+    } finally {
+      setGhLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadGhConnections()
+  }, [loadGhConnections])
+
+  const saveGhConnection = async () => {
+    if (!ghPat.trim()) {
+      setGhMsg({ type: 'error', text: 'Personal Access Token is required.' })
+      return
+    }
+    setGhSaving(true)
+    setGhMsg(null)
+    try {
+      await cdkPost('/integrations/github/connections', {
+        token: ghPat.trim(),
+        displayName: ghDisplayName.trim() || 'GitHub',
+      })
+      setGhPat('')
+      setGhDisplayName('')
+      setGhMsg({ type: 'success', text: 'GitHub connection saved. Your token is stored securely and cannot be retrieved.' })
+      await loadGhConnections()
+    } catch (e: unknown) {
+      setGhMsg({ type: 'error', text: (e as Error)?.message ?? 'Failed to save connection.' })
+    } finally {
+      setGhSaving(false)
+    }
+  }
+
+  const revokeGhConnection = async (connectionId: string) => {
+    setGhRevoking(connectionId)
+    setGhMsg(null)
+    try {
+      await cdkDelete(`/integrations/github/connections/${connectionId}`)
+      setGhConnections((prev) => prev.filter((c) => c.connectionId !== connectionId))
+    } catch (e: unknown) {
+      setGhMsg({ type: 'error', text: (e as Error)?.message ?? 'Failed to revoke connection.' })
+    } finally {
+      setGhRevoking(null)
+    }
+  }
 
   const connectBitbucket = async () => {
     if (!workspace?.id) return
@@ -369,6 +441,119 @@ export default function IntegrationsSettingsClient() {
           and branch), and the same refresh action with those scopes.
         </p>
       </section>
+
+      {/* GitHub Connections */}
+      <section className="pk-card p-6 sm:p-8 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">GitHub Connections</h2>
+            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+              Add a Personal Access Token to allow AutoDoc to clone private GitHub repositories. Tokens are stored encrypted
+              and are never displayed after saving (SOC2 Type 2).
+            </p>
+          </div>
+          {ghConnections.length > 0 && (
+            <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-[var(--color-success-bg)] text-emerald-800">
+              <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden />
+              {ghConnections.length === 1 ? '1 connection' : `${ghConnections.length} connections`}
+            </span>
+          )}
+        </div>
+
+        {ghMsg && (
+          <div
+            className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-sm ${
+              ghMsg.type === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : 'border-red-200 bg-red-50 text-red-800'
+            }`}
+          >
+            {ghMsg.text}
+          </div>
+        )}
+
+        {ghLoading ? (
+          <p className="text-sm text-[var(--color-text-tertiary)]">Loading connections…</p>
+        ) : ghConnections.length > 0 ? (
+          <div className="divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+            {ghConnections.map((conn) => (
+              <div key={conn.connectionId} className="flex items-center justify-between gap-4 px-4 py-3 bg-[var(--color-surface)]">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{conn.displayName}</p>
+                  <p className="text-xs text-[var(--color-text-tertiary)] mt-0.5">
+                    Added {new Date(conn.createdAt).toLocaleDateString()}
+                    {conn.createdBy ? ` · ${conn.createdBy}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text-tertiary)]">
+                    <LockClosedIcon className="h-3 w-3" aria-hidden />
+                    Token hidden
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void revokeGhConnection(conn.connectionId)}
+                    disabled={ghRevoking === conn.connectionId}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50 transition-colors"
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" aria-hidden />
+                    {ghRevoking === conn.connectionId ? 'Revoking…' : 'Revoke'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-text-tertiary)] italic">No GitHub connections yet.</p>
+        )}
+
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4 space-y-3">
+          <p className="text-xs font-semibold text-[var(--color-text-primary)] uppercase tracking-wider">Add new connection</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                Display name
+              </label>
+              <input
+                type="text"
+                value={ghDisplayName}
+                onChange={(e) => setGhDisplayName(e.target.value)}
+                placeholder="e.g. My GitHub"
+                className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                Personal Access Token
+              </label>
+              <div className="relative">
+                <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-tertiary)] pointer-events-none" aria-hidden />
+                <input
+                  type="password"
+                  value={ghPat}
+                  onChange={(e) => setGhPat(e.target.value)}
+                  placeholder="ghp_••••••••••••••••••••"
+                  autoComplete="off"
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] pl-9 pr-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+                />
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-[var(--color-text-tertiary)]">
+            Needs <code className="font-mono">repo</code> scope. The token is encrypted on save and cannot be retrieved — only revoked.
+          </p>
+          <button
+            type="button"
+            onClick={() => void saveGhConnection()}
+            disabled={ghSaving || !ghPat.trim()}
+            className="pk-btn-primary disabled:opacity-50"
+          >
+            {ghSaving ? 'Saving…' : 'Save connection'}
+          </button>
+        </div>
+      </section>
+
+      <GitHubRepoWorkflowSection connections={ghConnections} />
 
       <p className="text-sm text-[var(--color-text-tertiary)]">
         <Link href="/dashboard" className="text-primary font-medium hover:underline">

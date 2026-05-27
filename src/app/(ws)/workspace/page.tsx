@@ -142,6 +142,13 @@ export default function WorkspacePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
+        {/* AutoDoc wordmark */}
+        <img
+          src="/autodoc-logo.svg"
+          alt="AutoDoc"
+          className="h-8 w-auto mb-4"
+          style={{ filter: 'none' }}
+        />
         <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">AI Workspace</h1>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
           Launch an AI-powered coding environment directly in your browser.

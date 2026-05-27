@@ -26,3 +26,9 @@ export async function cdkPost<T = unknown>(path: string, body: unknown): Promise
   if (!res.ok) throw new Error(`CDK API error ${res.status}: ${await res.text()}`)
   return res.json() as Promise<T>
 }
+
+export async function cdkDelete<T = unknown>(path: string): Promise<T> {
+  const res = await cdkFetch(path, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`CDK API error ${res.status}: ${await res.text()}`)
+  return res.json() as Promise<T>
+}
