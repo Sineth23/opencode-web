@@ -8,11 +8,12 @@ import {
   TrashIcon,
   XMarkIcon,
   ArrowPathIcon,
-  CheckCircleIcon,
   ExclamationCircleIcon,
   FolderOpenIcon,
   DocumentTextIcon,
   CodeBracketIcon,
+  PencilSquareIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline'
 import {
   listDatasets,
@@ -31,6 +32,7 @@ const STATUS_CONFIG = {
 }
 
 type IndexMode = 'full' | 'catalog'
+type SourceTab = 'repo' | 'custom'
 
 export default function DatasetManager({ activeTenantId }: { activeTenantId?: string | null }) {
   const [open, setOpen] = useState(false)
@@ -42,11 +44,16 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
 
   // Indexing form state
   const [showForm, setShowForm]   = useState(false)
+  const [sourceTab, setSourceTab] = useState<SourceTab>('repo')
   const [selectedRepo, setSelectedRepo] = useState<AvailableRepo | null>(null)
   const [indexMode, setIndexMode] = useState<IndexMode>('full')
+
+  // Custom directory state
+  const [customPrefix, setCustomPrefix] = useState('')
+  const [customName, setCustomName]     = useState('')
+
   const [indexing, setIndexing]   = useState(false)
   const [indexError, setIndexError] = useState<string | null>(null)
-
   const [removingId, setRemovingId] = useState<string | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -66,13 +73,12 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
       const d = await listAvailableRepos(activeTenantId ?? undefined)
       setRepos(d.repos ?? [])
     } catch {
-      // silently fail — repos will be empty
+      // silently fail
     } finally {
       setReposLoading(false)
     }
   }, [activeTenantId])
 
-  // Load datasets when panel opens
   useEffect(() => {
     if (!open) return
     setLoading(true)
@@ -81,7 +87,6 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
     void fetchRepos()
   }, [open, fetchDatasets, fetchRepos])
 
-  // Poll while any dataset is indexing or deleting
   useEffect(() => {
     const busy = datasets.some((d) => d.status === 'INDEXING' || d.status === 'DELETING')
     if (busy && !pollRef.current) {
@@ -95,18 +100,39 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
     }
   }, [datasets, fetchDatasets])
 
+  function resetForm() {
+    setShowForm(false)
+    setSelectedRepo(null)
+    setIndexMode('full')
+    setCustomPrefix('')
+    setCustomName('')
+    setIndexError(null)
+    setSourceTab('repo')
+  }
+
   async function handleIndex() {
-    if (!selectedRepo) return
     setIndexing(true)
     setIndexError(null)
-    const prefix = indexMode === 'catalog' && selectedRepo.catalogPrefix
-      ? selectedRepo.catalogPrefix
-      : selectedRepo.worktreePrefix
+
+    let name = ''
+    let prefix = ''
+
+    if (sourceTab === 'repo') {
+      if (!selectedRepo) { setIndexError('Select a repo first.'); setIndexing(false); return }
+      name   = selectedRepo.name
+      prefix = indexMode === 'catalog' && selectedRepo.catalogPrefix
+        ? selectedRepo.catalogPrefix
+        : selectedRepo.worktreePrefix
+    } else {
+      name   = customName.trim()
+      prefix = customPrefix.trim()
+      if (!name)   { setIndexError('Enter a name for this dataset.'); setIndexing(false); return }
+      if (!prefix) { setIndexError('Enter the S3 path to index.'); setIndexing(false); return }
+    }
+
     try {
-      await indexDataset(selectedRepo.name, prefix, indexMode, activeTenantId ?? undefined)
-      setShowForm(false)
-      setSelectedRepo(null)
-      setIndexMode('full')
+      await indexDataset(name, prefix, 'full', activeTenantId ?? undefined)
+      resetForm()
       await fetchDatasets()
     } catch (e) {
       setIndexError((e as Error).message)
@@ -129,6 +155,7 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
   }
 
   const readyCount = datasets.filter((d) => d.status === 'READY').length
+  const canSubmit  = sourceTab === 'repo' ? !!selectedRepo : (!!customPrefix.trim() && !!customName.trim())
 
   return (
     <>
@@ -162,14 +189,14 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
 
             <motion.div
-              className="relative w-full max-w-2xl bg-[var(--color-surface)] rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[80vh]"
+              className="relative w-full max-w-2xl bg-[var(--color-surface)] rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[85vh]"
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
               transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] flex-shrink-0">
                 <div>
                   <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Knowledge bases</h2>
                   <p className="text-xs text-[var(--color-text-tertiary)] mt-0.5">
@@ -206,122 +233,189 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-4 pb-4 border-t border-[var(--color-border)] space-y-4 pt-4">
+                        <div className="border-t border-[var(--color-border)]">
 
-                          {/* Repo picker */}
-                          <div>
-                            <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">Select repo</p>
-                            {reposLoading ? (
-                              <div className="space-y-2">
-                                {[1, 2].map((i) => (
-                                  <div key={i} className="h-12 rounded-lg bg-[var(--color-bg-tertiary)] animate-pulse" />
-                                ))}
-                              </div>
-                            ) : repos.length === 0 ? (
-                              <p className="text-xs text-[var(--color-text-tertiary)] py-3 text-center">
-                                No cloned repos found. Clone a repo first via Sync center.
-                              </p>
-                            ) : (
-                              <div className="space-y-2">
-                                {repos.map((repo) => (
-                                  <button
-                                    key={repo.worktreePrefix}
-                                    onClick={() => setSelectedRepo(repo)}
-                                    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg border text-left transition-all ${
-                                      selectedRepo?.worktreePrefix === repo.worktreePrefix
-                                        ? 'border-primary bg-[var(--color-accent-light)]'
-                                        : 'border-[var(--color-border)] hover:border-primary/50 hover:bg-[var(--color-bg-secondary)]'
-                                    }`}
-                                  >
-                                    <FolderOpenIcon className={`h-4 w-4 shrink-0 ${
-                                      selectedRepo?.worktreePrefix === repo.worktreePrefix ? 'text-primary' : 'text-[var(--color-text-tertiary)]'
-                                    }`} />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{repo.name}</p>
-                                      <p className="text-[10px] text-[var(--color-text-tertiary)]">
-                                        Cloned {new Date(repo.clonedAt).toLocaleDateString()}
-                                      </p>
-                                    </div>
-                                    {selectedRepo?.worktreePrefix === repo.worktreePrefix && (
-                                      <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
+                          {/* Source tabs */}
+                          <div className="flex border-b border-[var(--color-border)]">
+                            <button
+                              onClick={() => setSourceTab('repo')}
+                              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                                sourceTab === 'repo'
+                                  ? 'border-primary text-primary'
+                                  : 'border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+                              }`}
+                            >
+                              <FolderOpenIcon className="h-3.5 w-3.5" />
+                              Cloned repos
+                            </button>
+                            <button
+                              onClick={() => setSourceTab('custom')}
+                              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                                sourceTab === 'custom'
+                                  ? 'border-primary text-primary'
+                                  : 'border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+                              }`}
+                            >
+                              <PencilSquareIcon className="h-3.5 w-3.5" />
+                              Custom directory
+                            </button>
                           </div>
 
-                          {/* Mode toggle */}
-                          {selectedRepo && (
-                            <div>
-                              <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">What to index</p>
-                              <div className="grid grid-cols-2 gap-2">
-                                <button
-                                  onClick={() => setIndexMode('full')}
-                                  className={`flex items-start gap-2.5 px-3 py-3 rounded-lg border text-left transition-all ${
-                                    indexMode === 'full'
-                                      ? 'border-primary bg-[var(--color-accent-light)]'
-                                      : 'border-[var(--color-border)] hover:border-primary/40'
-                                  }`}
-                                >
-                                  <CodeBracketIcon className={`h-4 w-4 mt-0.5 shrink-0 ${indexMode === 'full' ? 'text-primary' : 'text-[var(--color-text-tertiary)]'}`} />
-                                  <div>
-                                    <p className="text-xs font-semibold text-[var(--color-text-primary)]">Full repo</p>
-                                    <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5 leading-snug">
-                                      All code and markdown files. Best for code questions.
+                          <div className="px-4 pb-4 space-y-4 pt-4">
+
+                            {/* Repo tab */}
+                            {sourceTab === 'repo' && (
+                              <div className="space-y-4">
+                                <div>
+                                  <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">Select repo</p>
+                                  {reposLoading ? (
+                                    <div className="space-y-2">
+                                      {[1, 2].map((i) => (
+                                        <div key={i} className="h-12 rounded-lg bg-[var(--color-bg-tertiary)] animate-pulse" />
+                                      ))}
+                                    </div>
+                                  ) : repos.length === 0 ? (
+                                    <p className="text-xs text-[var(--color-text-tertiary)] py-4 text-center border border-dashed border-[var(--color-border)] rounded-lg">
+                                      No cloned repos found. Clone a repo first via Sync center,<br />or use the <button className="text-primary underline" onClick={() => setSourceTab('custom')}>Custom directory</button> tab.
                                     </p>
-                                  </div>
-                                </button>
-                                <button
-                                  onClick={() => setIndexMode('catalog')}
-                                  disabled={!selectedRepo.catalogPrefix}
-                                  className={`flex items-start gap-2.5 px-3 py-3 rounded-lg border text-left transition-all ${
-                                    !selectedRepo.catalogPrefix ? 'opacity-40 cursor-not-allowed border-[var(--color-border)]' :
-                                    indexMode === 'catalog'
-                                      ? 'border-primary bg-[var(--color-accent-light)]'
-                                      : 'border-[var(--color-border)] hover:border-primary/40'
-                                  }`}
-                                >
-                                  <DocumentTextIcon className={`h-4 w-4 mt-0.5 shrink-0 ${indexMode === 'catalog' ? 'text-primary' : 'text-[var(--color-text-tertiary)]'}`} />
+                                  ) : (
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                      {repos.map((repo) => (
+                                        <button
+                                          key={repo.worktreePrefix}
+                                          onClick={() => setSelectedRepo(repo)}
+                                          className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg border text-left transition-all ${
+                                            selectedRepo?.worktreePrefix === repo.worktreePrefix
+                                              ? 'border-primary bg-[var(--color-accent-light)]'
+                                              : 'border-[var(--color-border)] hover:border-primary/50 hover:bg-[var(--color-bg-secondary)]'
+                                          }`}
+                                        >
+                                          <FolderOpenIcon className={`h-4 w-4 shrink-0 ${
+                                            selectedRepo?.worktreePrefix === repo.worktreePrefix ? 'text-primary' : 'text-[var(--color-text-tertiary)]'
+                                          }`} />
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{repo.name}</p>
+                                            <p className="text-[10px] text-[var(--color-text-tertiary)] truncate font-mono">{repo.worktreePrefix}</p>
+                                          </div>
+                                          {selectedRepo?.worktreePrefix === repo.worktreePrefix && (
+                                            <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {selectedRepo && (
                                   <div>
-                                    <p className="text-xs font-semibold text-[var(--color-text-primary)]">Docs only</p>
-                                    <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5 leading-snug">
-                                      Generated catalog markdown. Faster and smaller.
-                                      {!selectedRepo.catalogPrefix && ' (not available)'}
-                                    </p>
+                                    <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">What to index</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <button
+                                        onClick={() => setIndexMode('full')}
+                                        className={`flex items-start gap-2.5 px-3 py-3 rounded-lg border text-left transition-all ${
+                                          indexMode === 'full'
+                                            ? 'border-primary bg-[var(--color-accent-light)]'
+                                            : 'border-[var(--color-border)] hover:border-primary/40'
+                                        }`}
+                                      >
+                                        <CodeBracketIcon className={`h-4 w-4 mt-0.5 shrink-0 ${indexMode === 'full' ? 'text-primary' : 'text-[var(--color-text-tertiary)]'}`} />
+                                        <div>
+                                          <p className="text-xs font-semibold text-[var(--color-text-primary)]">Full repo</p>
+                                          <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5 leading-snug">All code and markdown files.</p>
+                                        </div>
+                                      </button>
+                                      <button
+                                        onClick={() => setIndexMode('catalog')}
+                                        disabled={!selectedRepo.catalogPrefix}
+                                        className={`flex items-start gap-2.5 px-3 py-3 rounded-lg border text-left transition-all ${
+                                          !selectedRepo.catalogPrefix ? 'opacity-40 cursor-not-allowed border-[var(--color-border)]' :
+                                          indexMode === 'catalog'
+                                            ? 'border-primary bg-[var(--color-accent-light)]'
+                                            : 'border-[var(--color-border)] hover:border-primary/40'
+                                        }`}
+                                      >
+                                        <DocumentTextIcon className={`h-4 w-4 mt-0.5 shrink-0 ${indexMode === 'catalog' ? 'text-primary' : 'text-[var(--color-text-tertiary)]'}`} />
+                                        <div>
+                                          <p className="text-xs font-semibold text-[var(--color-text-primary)]">Docs only</p>
+                                          <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5 leading-snug">
+                                            Catalog markdown only.{!selectedRepo.catalogPrefix && ' (not available)'}
+                                          </p>
+                                        </div>
+                                      </button>
+                                    </div>
                                   </div>
-                                </button>
+                                )}
                               </div>
-                            </div>
-                          )}
+                            )}
 
-                          {indexError && (
-                            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{indexError}</p>
-                          )}
-
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              onClick={() => { setShowForm(false); setSelectedRepo(null); setIndexError(null) }}
-                              className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => void handleIndex()}
-                              disabled={!selectedRepo || indexing}
-                              className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                            >
-                              {indexing ? (
-                                <>
-                                  <motion.div
-                                    className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white"
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+                            {/* Custom directory tab */}
+                            {sourceTab === 'custom' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1.5">
+                                    Dataset name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={customName}
+                                    onChange={(e) => setCustomName(e.target.value)}
+                                    placeholder="e.g. KlickInc SRED docs"
+                                    className="w-full text-sm rounded-lg border border-[var(--color-border)] px-3 py-2
+                                      bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]
+                                      placeholder:text-[var(--color-text-tertiary)]
+                                      focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
                                   />
-                                  Starting…
-                                </>
-                              ) : 'Start indexing'}
-                            </button>
+                                </div>
+                                <div>
+                                  <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1.5">
+                                    S3 path (prefix within your tenant bucket)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={customPrefix}
+                                    onChange={(e) => setCustomPrefix(e.target.value)}
+                                    placeholder="e.g. projects/default/repos/my-repo/snapshots/job_xxx/worktree/"
+                                    className="w-full text-sm font-mono rounded-lg border border-[var(--color-border)] px-3 py-2
+                                      bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]
+                                      placeholder:text-[var(--color-text-tertiary)]
+                                      focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
+                                  />
+                                  <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1.5 leading-relaxed">
+                                    Copy the path from the S3 browser. All text files under this prefix will be indexed.
+                                    Binaries, images, and lock files are skipped automatically.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {indexError && (
+                              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{indexError}</p>
+                            )}
+
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={resetForm}
+                                className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => void handleIndex()}
+                                disabled={!canSubmit || indexing}
+                                className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                              >
+                                {indexing ? (
+                                  <>
+                                    <motion.div
+                                      className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white"
+                                      animate={{ rotate: 360 }}
+                                      transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+                                    />
+                                    Starting…
+                                  </>
+                                ) : 'Start indexing'}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </motion.div>
@@ -385,10 +479,7 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               {ds.status === 'FAILED' && (
-                                <button
-                                  title="Retry indexing"
-                                  className="p-1.5 rounded text-[var(--color-text-tertiary)] hover:text-primary hover:bg-[var(--color-accent-light)] transition-colors"
-                                >
+                                <button title="Retry" className="p-1.5 rounded text-[var(--color-text-tertiary)] hover:text-primary hover:bg-[var(--color-accent-light)] transition-colors">
                                   <ArrowPathIcon className="h-4 w-4" />
                                 </button>
                               )}
