@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -217,6 +217,7 @@ function CognitoAuthForm({ onSuccess }: { onSuccess: () => void }) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [mfaSecret, setMfaSecret] = useState('')
+  const [qrDataUrl, setQrDataUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -313,23 +314,30 @@ function CognitoAuthForm({ onSuccess }: { onSuccess: () => void }) {
     }
   }
 
-  const beginMfaSetup = async () => {
+  const beginMfaSetup = useCallback(async () => {
     setIsSubmitting(true)
     try {
       const useAccessToken = Boolean(accessTokenRef.current)
       const token = accessTokenRef.current || sessionRef.current
       const data = await associateSoftwareToken(token, useAccessToken) as Record<string, unknown>
       if (data.Session) sessionRef.current = data.Session as string
-      setMfaSecret(data.SecretCode as string)
+      const secret = data.SecretCode as string
+      setMfaSecret(secret)
       setMfaCode('')
-      setInfo('Scan the secret below with your authenticator app, then enter the 6-digit code.')
+      setQrDataUrl('')
+      // Generate QR code for the otpauth URI
+      const otpauthUri = `otpauth://totp/AutoDoc:${encodeURIComponent(email)}?secret=${secret}&issuer=AutoDoc`
+      import('qrcode').then((QRCode) => {
+        void QRCode.toDataURL(otpauthUri, { width: 200, margin: 1 }).then(setQrDataUrl)
+      })
+      setInfo(null)
       setStep('mfa-setup')
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [email])
 
   const handleMfaSetupVerify = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -380,7 +388,7 @@ function CognitoAuthForm({ onSuccess }: { onSuccess: () => void }) {
     'credentials': 'Sign in to your knowledge workspace',
     'mfa': 'Verify your identity to continue',
     'new-password': 'Choose a strong password for your account',
-    'mfa-setup': 'Scan the code with Google Authenticator or Authy',
+    'mfa-setup': 'Scan the QR code with any authenticator app',
   }
 
   return (
@@ -449,10 +457,27 @@ function CognitoAuthForm({ onSuccess }: { onSuccess: () => void }) {
 
         {step === 'mfa-setup' && (
           <form onSubmit={(e) => void handleMfaSetupVerify(e)} className="space-y-5">
-            <div className="rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4">
-              <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2 uppercase tracking-wide">Authenticator secret key</p>
-              <code className="block text-sm font-mono text-[var(--color-text-primary)] break-all select-all">{mfaSecret}</code>
-              <p className="text-xs text-[var(--color-text-tertiary)] mt-2">Or use <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app — add account by entering the key above.</p>
+            <div className="rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 space-y-3">
+              <p className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">
+                Scan with your authenticator app
+              </p>
+              {qrDataUrl ? (
+                <div className="flex justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={qrDataUrl} alt="MFA QR code" width={200} height={200} className="rounded-lg border border-[var(--color-border)]" />
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <div className="h-[200px] w-[200px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] animate-pulse" />
+                </div>
+              )}
+              <p className="text-xs text-[var(--color-text-tertiary)] text-center">
+                Works with <strong className="text-[var(--color-text-secondary)]">Google Authenticator</strong>, <strong className="text-[var(--color-text-secondary)]">Authy</strong>, <strong className="text-[var(--color-text-secondary)]">1Password</strong>, <strong className="text-[var(--color-text-secondary)]">Microsoft Authenticator</strong>, and any TOTP app.
+              </p>
+              <details className="text-xs text-[var(--color-text-tertiary)]">
+                <summary className="cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors">Can&apos;t scan? Enter the key manually</summary>
+                <code className="block mt-2 text-xs font-mono text-[var(--color-text-primary)] break-all select-all bg-[var(--color-bg-tertiary)] rounded p-2">{mfaSecret}</code>
+              </details>
             </div>
             <div>
               <label htmlFor="cog-setup-code" className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">6-digit code from your app</label>
