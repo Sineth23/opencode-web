@@ -267,6 +267,18 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                                 <option value={CUSTOM_VALUE}>Custom S3 path…</option>
                               </optgroup>
                             </select>
+
+                          {/* S3 path preview */}
+                          {selectedRepo && (
+                            <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-0.5">S3 path to index</p>
+                              <p className="text-[11px] font-mono text-[var(--color-text-secondary)] break-all leading-relaxed">
+                                {indexMode === 'catalog' && selectedRepo.catalogPrefix
+                                  ? selectedRepo.catalogPrefix
+                                  : selectedRepo.worktreePrefix}
+                              </p>
+                            </div>
+                          )}
                           </div>
 
                           {/* Repo mode toggle */}

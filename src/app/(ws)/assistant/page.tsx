@@ -18,6 +18,7 @@ import {
   MagnifyingGlassIcon,
   CpuChipIcon,
   LightBulbIcon,
+  CircleStackIcon,
 } from '@heroicons/react/24/outline'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -29,6 +30,7 @@ import { withSupportContact } from '@/lib/support-copy'
 import { Skeleton } from '@/components/ui/Skeleton'
 import DatasetManager from '@/components/assistant/DatasetManager'
 import { useSuperAdmin } from '@/lib/use-super-admin'
+import { listDatasets, queryAssistant, type Dataset } from '@/lib/assistant-api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -750,6 +752,10 @@ export default function AssistantPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [creatingThread, setCreatingThread] = useState(false)
 
+  // RAG knowledge-base query mode
+  const [ragDatasets, setRagDatasets]   = useState<Dataset[]>([])
+  const [activeRagId, setActiveRagId]   = useState<string>('') // '' = OpenCode SSE | 'all' | datasetId
+
   // Side canvas: inline code from markdown, fetched snippet by path, or full handbook article
   const [canvas, setCanvas] = useState<CanvasState | null>(null)
 
@@ -934,6 +940,14 @@ export default function AssistantPage() {
     if (rm === 'grounded' || rm === 'power') setAssistantMode(rm)
   }, [activeThread?.id, activeThread?.response_mode])
 
+  // ── Load RAG datasets (READY only) ────────────────────────────────────────
+  useEffect(() => {
+    void listDatasets(activeTenantId ?? undefined)
+      .then((d) => setRagDatasets((d.datasets ?? []).filter((ds) => ds.status === 'READY')))
+      .catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTenantId])
+
   // ── Load scope repos ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!workspace?.id) return
@@ -1115,6 +1129,45 @@ export default function AssistantPage() {
   const doSend = async (text: string) => {
     const q = text.trim()
     if (!q || !workspace?.id || sending) return
+
+    // ── RAG path: query pgvector knowledge base ──────────────────────────────
+    if (activeRagId) {
+      const ids = activeRagId === 'all'
+        ? ragDatasets.map((d) => d.datasetId)
+        : [activeRagId]
+      setSending(true)
+      setThinking(true)
+      setInput('')
+      if (inputRef.current) inputRef.current.style.height = 'auto'
+      setMessages((m) => [...m, { role: 'user', content: q, clientId: newClientId() }])
+      try {
+        const result = await queryAssistant(q, ids, activeTenantId ?? undefined)
+        const sources: SourceRef[] = result.sources.map((s) => ({
+          label: s.filePath.split('/').pop() ?? s.filePath,
+          path: s.filePath,
+          confidence: 'high' as const,
+        }))
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: result.answer,
+          sources: sources.length > 0 ? sources : undefined,
+          clientId: newClientId(),
+        }])
+        if (sources.length > 0) autoOpenFromSources(sources)
+      } catch (e) {
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: (e as Error).message || 'Query failed.',
+          low: true,
+          clientId: newClientId(),
+        }])
+      } finally {
+        setSending(false)
+        setThinking(false)
+      }
+      return
+    }
+
     const thread = activeRef.current
     if (!thread) { pendingMsg.current = q; await createThread(); return }
 
@@ -1435,12 +1488,21 @@ export default function AssistantPage() {
           </>
         )}
 
-        {!threadsLoading && activeThread ? (
+        {!threadsLoading && (activeThread || activeRagId) ? (
           <>
             {/* Header */}
             <div className="flex-shrink-0 flex items-center gap-3 px-5 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-sm" style={{ height: 56 }}>
               <div className="flex-1 min-w-0">
-                {editingTitle ? (
+                {activeRagId ? (
+                  <div className="flex items-center gap-2">
+                    <CircleStackIcon className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <span className="text-[14px] font-semibold text-[var(--color-text-primary)] truncate">
+                      {activeRagId === 'all'
+                        ? 'All knowledge bases'
+                        : (ragDatasets.find((d) => d.datasetId === activeRagId)?.name ?? 'Knowledge base')}
+                    </span>
+                  </div>
+                ) : activeThread && editingTitle ? (
                   <input
                     ref={titleRef}
                     value={titleDraft}
@@ -1450,7 +1512,7 @@ export default function AssistantPage() {
                     className="text-[14px] font-semibold w-full max-w-sm bg-transparent outline-none border-b border-primary text-[var(--color-text-primary)] pb-px"
                     maxLength={200}
                   />
-                ) : (
+                ) : activeThread ? (
                   <button
                     onClick={() => { setTitleDraft(activeThread.title ?? ''); setEditingTitle(true); setTimeout(() => titleRef.current?.select(), 20) }}
                     className="text-[14px] font-semibold text-[var(--color-text-primary)] hover:text-primary transition-colors truncate max-w-sm block text-left"
@@ -1458,83 +1520,105 @@ export default function AssistantPage() {
                   >
                     {clip(activeThread.title, 55)}
                   </button>
-                )}
+                ) : null}
               </div>
 
               {/* Scope selects inline */}
               <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Knowledge-base selector */}
                 <select
-                  value={assistantMode}
-                  onChange={(e) => {
-                    const mode = e.target.value as AssistantMode
-                    setAssistantMode(mode)
-                    const t = activeRef.current
-                    if (!t) return
-                    void authorizedFetch(`/api/assistant/threads/${t.id}`, {
-                      method: 'PATCH',
-                      body: JSON.stringify({ response_mode: mode }),
-                    })
-                      .then(() => {
-                        setActiveThread((prev) => (prev ? { ...prev, response_mode: mode } : prev))
-                        setThreads((p) => p.map((x) => (x.id === t.id ? { ...x, response_mode: mode } : x)))
-                      })
-                      .catch(console.error)
-                  }}
+                  value={activeRagId}
+                  onChange={(e) => { setActiveRagId(e.target.value); setMessages([]) }}
                   className={`text-[12px] rounded-[var(--radius-md)] border px-2 py-1.5 pr-6 ${
-                    assistantMode === 'power'
-                      ? 'border-violet-300 bg-violet-50 text-violet-900'
+                    activeRagId
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-300'
                       : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
                   }`}
-                  title={
-                    assistantMode === 'power'
-                      ? 'Power mode: deeper reasoning and richer answers; may be slower.'
-                      : 'Grounded mode: source-anchored answers with stronger citation focus.'
-                  }
+                  title="Query a knowledge base (RAG) instead of the default codebase assistant"
                 >
-                  <option value="grounded">Grounded mode</option>
-                  <option value="power">Power mode</option>
+                  <option value="">Codebase assistant</option>
+                  {ragDatasets.length > 1 && <option value="all">All knowledge bases</option>}
+                  {ragDatasets.map((d) => (
+                    <option key={d.datasetId} value={d.datasetId}>{d.name}</option>
+                  ))}
                 </select>
-                <select
-                  value={scopeRepoId}
-                  onChange={(e) => { setScopeRepoId(e.target.value); setScopeBranch('') }}
-                  className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 bg-[var(--color-surface)] pr-6 text-[var(--color-text-secondary)] max-w-[150px] truncate"
-                >
-                  <option value="">All repos</option>
-                  {scopeRepos.map((r) => <option key={r.id} value={r.id}>{r.name || r.slug}</option>)}
-                </select>
-                {scopeRepoId && (
-                  <select
-                    value={scopeBranch}
-                    onChange={(e) => setScopeBranch(e.target.value)}
-                    className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 bg-[var(--color-surface)] pr-6 text-[var(--color-text-secondary)] max-w-[120px]"
-                  >
-                    <option value="">All branches</option>
-                    {branchOpts.map((b) => <option key={b.branch} value={b.branch}>{b.branch} ({b.chunk_count.toLocaleString()})</option>)}
-                  </select>
+
+                {!activeRagId && activeThread && (
+                  <>
+                    <select
+                      value={assistantMode}
+                      onChange={(e) => {
+                        const mode = e.target.value as AssistantMode
+                        setAssistantMode(mode)
+                        const t = activeRef.current
+                        if (!t) return
+                        void authorizedFetch(`/api/assistant/threads/${t.id}`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({ response_mode: mode }),
+                        })
+                          .then(() => {
+                            setActiveThread((prev) => (prev ? { ...prev, response_mode: mode } : prev))
+                            setThreads((p) => p.map((x) => (x.id === t.id ? { ...x, response_mode: mode } : x)))
+                          })
+                          .catch(console.error)
+                      }}
+                      className={`text-[12px] rounded-[var(--radius-md)] border px-2 py-1.5 pr-6 ${
+                        assistantMode === 'power'
+                          ? 'border-violet-300 bg-violet-50 text-violet-900'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                      }`}
+                      title={
+                        assistantMode === 'power'
+                          ? 'Power mode: deeper reasoning and richer answers; may be slower.'
+                          : 'Grounded mode: source-anchored answers with stronger citation focus.'
+                      }
+                    >
+                      <option value="grounded">Grounded mode</option>
+                      <option value="power">Power mode</option>
+                    </select>
+                    <select
+                      value={scopeRepoId}
+                      onChange={(e) => { setScopeRepoId(e.target.value); setScopeBranch('') }}
+                      className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 bg-[var(--color-surface)] pr-6 text-[var(--color-text-secondary)] max-w-[150px] truncate"
+                    >
+                      <option value="">All repos</option>
+                      {scopeRepos.map((r) => <option key={r.id} value={r.id}>{r.name || r.slug}</option>)}
+                    </select>
+                    {scopeRepoId && (
+                      <select
+                        value={scopeBranch}
+                        onChange={(e) => setScopeBranch(e.target.value)}
+                        className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 bg-[var(--color-surface)] pr-6 text-[var(--color-text-secondary)] max-w-[120px]"
+                      >
+                        <option value="">All branches</option>
+                        {branchOpts.map((b) => <option key={b.branch} value={b.branch}>{b.branch} ({b.chunk_count.toLocaleString()})</option>)}
+                      </select>
+                    )}
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)]">
+                        Answer style
+                      </label>
+                      <select
+                        aria-label="Answer style (persona)"
+                        value={activeThread.persona ?? 'pm'}
+                        onChange={async (e) => {
+                          const persona = e.target.value as Persona
+                          setActiveThread((t) => (t ? { ...t, persona } : t))
+                          setThreads((p) => p.map((t) => (t.id === activeThread.id ? { ...t, persona } : t)))
+                          await authorizedFetch(`/api/assistant/threads/${activeThread.id}`, { method: 'PATCH', body: JSON.stringify({ persona }) }).catch(console.error)
+                        }}
+                        title="Sets tone and how much technical depth the assistant uses for this conversation."
+                        className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 bg-[var(--color-surface)] pr-6 text-[var(--color-text-secondary)]"
+                      >
+                        {Object.entries(PERSONA_LABELS).map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
                 )}
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)]">
-                    Answer style
-                  </label>
-                  <select
-                    aria-label="Answer style (persona)"
-                    value={activeThread.persona ?? 'pm'}
-                    onChange={async (e) => {
-                      const persona = e.target.value as Persona
-                      setActiveThread((t) => (t ? { ...t, persona } : t))
-                      setThreads((p) => p.map((t) => (t.id === activeThread.id ? { ...t, persona } : t)))
-                      await authorizedFetch(`/api/assistant/threads/${activeThread.id}`, { method: 'PATCH', body: JSON.stringify({ persona }) }).catch(console.error)
-                    }}
-                    title="Sets tone and how much technical depth the assistant uses for this conversation."
-                    className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 bg-[var(--color-surface)] pr-6 text-[var(--color-text-secondary)]"
-                  >
-                    {Object.entries(PERSONA_LABELS).map(([v, l]) => (
-                      <option key={v} value={v}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
 
@@ -1760,7 +1844,10 @@ export default function AssistantPage() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void doSend(input) }
                       }}
-                      placeholder="Ask about your codebase: how features work, where logic lives, what data models do…"
+                      placeholder={activeRagId
+                        ? 'Ask a question about your indexed knowledge base…'
+                        : 'Ask about your codebase: how features work, where logic lives, what data models do…'
+                      }
                       rows={1}
                       disabled={sending}
                       className="w-full resize-none rounded-2xl border border-[var(--color-border)] px-4 py-3.5 pr-12
