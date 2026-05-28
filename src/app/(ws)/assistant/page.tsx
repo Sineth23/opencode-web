@@ -583,11 +583,22 @@ function CodeCanvas({
   )
 }
 
-/** Handbook article in the side canvas: readable surface, same markdown treatment as answers */
+/** Restore newlines before markdown block-level markers lost during word-chunking */
+function restoreChunkMarkdown(raw: string): string {
+  return raw
+    .replace(/\s+(#{1,6}\s)/g, '\n\n$1')   // ## headings
+    .replace(/\s+(---+)\s/g, '\n\n$1\n\n') // horizontal rules
+    .replace(/\s+(\*\*\*+)\s/g, '\n\n$1\n\n')
+    .trim()
+}
+
+/** Source excerpt canvas: renders the chunk as markdown in a clean readable panel */
 function ExcerptCanvas({ text, label, path, onClose }: { text: string; label: string; path?: string; onClose: () => void }) {
+  const md = restoreChunkMarkdown(text)
   return (
     <div className="flex flex-col h-full w-full bg-[var(--color-surface)]">
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]/50">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-2 min-w-0 pr-2">
           <DocumentTextIcon className="h-4 w-4 text-primary flex-shrink-0" />
           <div className="min-w-0">
@@ -597,21 +608,54 @@ function ExcerptCanvas({ text, label, path, onClose }: { text: string; label: st
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
+        <button type="button" onClick={onClose}
           className="p-1.5 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors flex-shrink-0"
-          aria-label="Close panel"
-        >
+          aria-label="Close panel">
           <XMarkIcon className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Source excerpt</p>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-5 py-4">
-          <p className="text-[13px] leading-[1.75] text-[var(--color-text-primary)] whitespace-pre-wrap break-words font-sans">
-            {text}
-          </p>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5">
+        <div className="
+          prose prose-sm max-w-none
+          text-[var(--color-text-primary)]
+          prose-headings:text-[var(--color-text-primary)] prose-headings:font-semibold prose-headings:mt-5 prose-headings:mb-2
+          prose-h1:text-[17px] prose-h2:text-[15px] prose-h3:text-[13px] prose-h4:text-[13px]
+          prose-p:text-[13px] prose-p:leading-[1.75] prose-p:my-2
+          prose-li:text-[13px] prose-li:leading-[1.65]
+          prose-strong:font-semibold prose-strong:text-[var(--color-text-primary)]
+          prose-em:text-[var(--color-text-secondary)]
+          prose-hr:border-[var(--color-border)] prose-hr:my-4
+          prose-code:text-[11px] prose-code:font-mono prose-code:bg-[var(--color-bg-tertiary)] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:border prose-code:border-[var(--color-border)]/60
+          prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+          prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-[var(--color-text-secondary)] prose-blockquote:not-italic
+        ">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}
+            components={{
+              code({ className, children, ...props }: MdCodeProps) {
+                const match = /language-(\w+)/.exec(className ?? '')
+                const lang = match?.[1] ?? 'text'
+                const codeStr = String(children).replace(/\n$/, '')
+                const isBlock = codeStr.includes('\n') || className?.startsWith('language-')
+                if (!isBlock) return <code className="text-[11px] font-mono bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]/60 px-1 py-0.5 rounded" {...props}>{children}</code>
+                return (
+                  <div className="my-3 rounded-lg overflow-hidden border border-[var(--color-border)]">
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900/95 border-b border-white/10">
+                      <span className="text-[10px] font-mono text-zinc-400">{lang}</span>
+                      <CopyBtn text={codeStr} />
+                    </div>
+                    <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
+                      customStyle={{ margin: 0, padding: '0.75rem', background: 'rgba(24,24,27,0.97)', fontSize: '11.5px', lineHeight: 1.6, borderRadius: 0 }}
+                      codeTagProps={{ style: { fontFamily: "'Fira Code', 'JetBrains Mono', monospace" } }}>
+                      {codeStr}
+                    </SyntaxHighlighter>
+                  </div>
+                )
+              },
+            }}
+          >
+            {md}
+          </ReactMarkdown>
         </div>
       </div>
     </div>
@@ -784,6 +828,10 @@ export default function AssistantPage() {
   const [thinkLabel, setThinkLabel] = useState<string | null>(null)
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('grounded')
   const pendingMsg = useRef('')
+
+  // Canvas resize
+  const [canvasWidth, setCanvasWidth] = useState(480)
+  const canvasDragRef = useRef<{ startX: number; startW: number } | null>(null)
 
   const [scopeRepos, setScopeRepos] = useState<ScopeRepo[]>([])
   const [scopeRepoId, setScopeRepoId] = useState('')
@@ -2013,20 +2061,33 @@ export default function AssistantPage() {
                   <motion.div
                     key={canvas.kind === 'doc' ? `doc-${canvas.sectionId}` : canvas.kind === 'excerpt' ? `excerpt-${canvas.label}` : `code-${canvas.label}`}
                     initial={{ width: 0, opacity: 0 }}
-                    animate={{
-                      width: canvas.kind === 'doc' || canvas.kind === 'excerpt' ? 460 : 420,
-                      opacity: 1,
-                    }}
+                    animate={{ width: canvasWidth, opacity: 1 }}
                     exit={{ width: 0, opacity: 0 }}
                     transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-                    className={`flex-shrink-0 border-l border-[var(--color-border)] overflow-hidden ${
-                      canvas.kind === 'code' ? 'bg-[#18181b]' : 'bg-[var(--color-bg-secondary)]'
+                    className={`flex-shrink-0 border-l border-[var(--color-border)] overflow-hidden flex flex-row ${
+                      canvas.kind === 'code' ? 'bg-[#18181b]' : 'bg-[var(--color-surface)]'
                     }`}
                     style={{ willChange: 'width' }}
                   >
+                    {/* Drag-to-resize handle */}
                     <div
-                      className={`h-full flex flex-col ${canvas.kind === 'code' ? 'w-[420px]' : 'w-[460px]'}`}
+                      className="w-1 flex-shrink-0 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors group relative"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        canvasDragRef.current = { startX: e.clientX, startW: canvasWidth }
+                        const onMove = (ev: MouseEvent) => {
+                          if (!canvasDragRef.current) return
+                          const delta = canvasDragRef.current.startX - ev.clientX
+                          setCanvasWidth(Math.min(900, Math.max(340, canvasDragRef.current.startW + delta)))
+                        }
+                        const onUp = () => { canvasDragRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                        window.addEventListener('mousemove', onMove)
+                        window.addEventListener('mouseup', onUp)
+                      }}
                     >
+                      <div className="absolute inset-y-0 left-0 w-4 -translate-x-1.5" />
+                    </div>
+                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                       {canvas.kind === 'code' ? (
                         <CodeCanvas
                           code={canvas.code}
