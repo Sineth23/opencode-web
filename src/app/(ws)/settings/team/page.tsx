@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   UserPlusIcon, TrashIcon, CheckCircleIcon,
   ExclamationTriangleIcon, EnvelopeIcon,
+  BuildingOfficeIcon, PlusIcon, ArrowRightIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline'
 import { cdkGet, cdkPost, cdkDelete } from '@/lib/cdk-api'
 import { useSuperAdmin } from '@/lib/use-super-admin'
@@ -17,13 +19,207 @@ type Member = {
   invitedBy: string
 }
 
+type Tenant = {
+  tenantId: string
+  companyName: string
+  status: 'ACTIVE' | 'OFFBOARDED' | string
+  createdAt: string
+}
+
 const ROLE_COLORS: Record<string, string> = {
   admin:  'bg-primary/10 text-primary',
   member: 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]',
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  ACTIVE:      'bg-emerald-100 text-emerald-800',
+  OFFBOARDED:  'bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]',
+}
+
+// ── Tenant management (SuperAdmin only) ──────────────────────────────────────
+
+function TenantManagementSection({
+  activeTenantId,
+  setActiveTenantId,
+}: {
+  activeTenantId: string | null
+  setActiveTenantId: (id: string | null) => void
+}) {
+  const [tenants, setTenants]         = useState<Tenant[]>([])
+  const [loadingTenants, setLoadingTenants] = useState(true)
+  const [tenantsError, setTenantsError]     = useState<string | null>(null)
+
+  const [companyName, setCompanyName] = useState('')
+  const [creating, setCreating]       = useState(false)
+  const [createMsg, setCreateMsg]     = useState<{ ok: boolean; text: string } | null>(null)
+
+  const loadTenants = useCallback(async () => {
+    setLoadingTenants(true)
+    setTenantsError(null)
+    try {
+      const d = await cdkGet<{ ok: boolean; tenants: Tenant[] }>('/admin/tenants')
+      setTenants(d.tenants ?? [])
+    } catch (e) {
+      setTenantsError((e as Error).message ?? 'Could not load tenants')
+    } finally {
+      setLoadingTenants(false)
+    }
+  }, [])
+
+  useEffect(() => { void loadTenants() }, [loadTenants])
+
+  async function createTenant() {
+    const name = companyName.trim()
+    if (!name) return
+    setCreating(true)
+    setCreateMsg(null)
+    try {
+      const d = await cdkPost<{
+        ok: boolean
+        tenantId: string
+        companyName: string
+        bucketName: string
+      }>('/tenants', { companyName: name })
+      setCreateMsg({ ok: true, text: `Tenant "${d.companyName}" created — bucket ${d.bucketName}` })
+      setCompanyName('')
+      void loadTenants()
+    } catch (e) {
+      setCreateMsg({ ok: false, text: (e as Error).message ?? 'Tenant creation failed' })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
+          <BuildingOfficeIcon className="h-4 w-4 text-primary" />
+          Tenants
+          <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 ml-1">SuperAdmin</span>
+        </h2>
+      </div>
+
+      {/* Create tenant form */}
+      <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 space-y-3">
+        <p className="text-xs text-[var(--color-text-tertiary)]">
+          Creating a tenant provisions an S3 bucket, IAM roles, and DynamoDB records. Takes ~5 seconds.
+        </p>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            placeholder="Company name (e.g. KlickInc)"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void createTenant() }}
+            disabled={creating}
+            className="flex-1 px-3 py-2.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            disabled={creating || !companyName.trim()}
+            onClick={() => void createTenant()}
+            className="shrink-0 flex items-center gap-1.5 bg-primary text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
+          >
+            <PlusIcon className="h-4 w-4" />
+            {creating ? 'Creating…' : 'Create tenant'}
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {createMsg && (
+            <motion.div
+              key="create-msg"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${
+                createMsg.ok
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                  : 'border-red-200 bg-red-50 text-red-900'
+              }`}
+            >
+              {createMsg.ok
+                ? <CheckCircleIcon className="h-4 w-4 shrink-0 mt-0.5" />
+                : <ExclamationTriangleIcon className="h-4 w-4 shrink-0 mt-0.5" />}
+              {createMsg.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Tenant list */}
+      <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]/40">
+          <p className="text-xs font-semibold text-[var(--color-text-secondary)]">
+            All tenants{!loadingTenants && tenants.length > 0 ? ` · ${tenants.length}` : ''}
+          </p>
+        </div>
+
+        {loadingTenants ? (
+          <div className="p-5 space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 rounded-lg bg-[var(--color-bg-tertiary)] animate-pulse" />
+            ))}
+          </div>
+        ) : tenantsError ? (
+          <p className="p-5 text-sm text-red-600">{tenantsError}</p>
+        ) : tenants.length === 0 ? (
+          <p className="p-5 text-sm text-[var(--color-text-secondary)]">No tenants yet.</p>
+        ) : (
+          <ul className="divide-y divide-[var(--color-border)]">
+            {tenants.map((t) => {
+              const isActive = t.tenantId === activeTenantId
+              return (
+                <li
+                  key={t.tenantId}
+                  className={`flex items-center gap-3 px-5 py-3 transition-colors ${
+                    isActive ? 'bg-[var(--color-accent-light)]' : 'hover:bg-[var(--color-bg-secondary)]/40'
+                  }`}
+                >
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/20 to-violet-400/20 border border-primary/20 flex items-center justify-center shrink-0">
+                    <span className="text-[11px] font-bold text-primary">
+                      {t.companyName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{t.companyName}</p>
+                    <p className="text-xs text-[var(--color-text-tertiary)]">
+                      {t.tenantId} · Created {new Date(t.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[t.status] ?? STATUS_COLORS.ACTIVE}`}>
+                    {t.status}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTenantId(isActive ? null : t.tenantId)}
+                    className={`shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                      isActive
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-primary/60 hover:text-primary'
+                    }`}
+                  >
+                    {isActive ? (
+                      <><CheckIcon className="h-3.5 w-3.5" /> Active</>
+                    ) : (
+                      <><ArrowRightIcon className="h-3.5 w-3.5" /> Switch</>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
+
 export default function TeamPage() {
-  const { isSuperAdmin, activeTenantId } = useSuperAdmin()
+  const { isSuperAdmin, activeTenantId, setActiveTenantId } = useSuperAdmin()
 
   const [members, setMembers]       = useState<Member[]>([])
   const [loading, setLoading]       = useState(true)
@@ -59,13 +255,15 @@ export default function TeamPage() {
     setInviting(true)
     setInviteMsg(null)
     try {
-      await cdkPost('/tenant/members', { email: trimmed, role: inviteRole })
+      const path = isSuperAdmin && activeTenantId
+        ? `/tenant/members?tenantId=${activeTenantId}`
+        : '/tenant/members'
+      await cdkPost(path, { email: trimmed, role: inviteRole })
       setInviteMsg({ ok: true, text: `Invitation sent to ${trimmed}` })
       setEmail('')
       void load()
     } catch (e) {
       const msg = (e as Error).message ?? 'Invitation failed'
-      // Show a friendly message for known conflict errors
       const friendly = msg.includes('already a member')
         ? `${trimmed} is already a member of this tenant.`
         : msg.includes('another tenant')
@@ -93,20 +291,42 @@ export default function TeamPage() {
     }
   }
 
+  const currentTenantLabel = isSuperAdmin && activeTenantId
+    ? `Managing tenant: ${activeTenantId}`
+    : undefined
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Team</h1>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          Invite client users to give them access to their tenant. Admins can also invite others and manage integrations.
+          {isSuperAdmin
+            ? 'Create tenants, switch context, and manage members across any tenant.'
+            : 'Invite client users to give them access to their tenant. Admins can also invite others and manage integrations.'}
         </p>
+        {currentTenantLabel && (
+          <p className="mt-2 text-xs font-mono px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 inline-block">
+            {currentTenantLabel}
+          </p>
+        )}
       </div>
+
+      {/* SuperAdmin: tenant management */}
+      {isSuperAdmin && (
+        <TenantManagementSection
+          activeTenantId={activeTenantId}
+          setActiveTenantId={setActiveTenantId}
+        />
+      )}
 
       {/* Invite form */}
       <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 space-y-4">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
           <UserPlusIcon className="h-4 w-4 text-primary" />
           Invite by email
+          {isSuperAdmin && !activeTenantId && (
+            <span className="text-[10px] text-[var(--color-text-tertiary)] font-normal ml-1">— select a tenant above first</span>
+          )}
         </h2>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -118,14 +338,14 @@ export default function TeamPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void sendInvite() }}
-              disabled={inviting}
+              disabled={inviting || (isSuperAdmin && !activeTenantId)}
               className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
             />
           </div>
           <select
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value as 'admin' | 'member')}
-            disabled={inviting}
+            disabled={inviting || (isSuperAdmin && !activeTenantId)}
             className="text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] px-3 py-2.5 disabled:opacity-60"
           >
             <option value="member">Member — view only</option>
@@ -133,7 +353,7 @@ export default function TeamPage() {
           </select>
           <button
             type="button"
-            disabled={inviting || !email.trim()}
+            disabled={inviting || !email.trim() || (isSuperAdmin && !activeTenantId)}
             onClick={() => void sendInvite()}
             className="shrink-0 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-50"
           >
@@ -156,16 +376,15 @@ export default function TeamPage() {
             >
               {inviteMsg.ok
                 ? <CheckCircleIcon className="h-4 w-4 shrink-0" />
-                : <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
-              }
+                : <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />}
               {inviteMsg.text}
             </motion.div>
           )}
         </AnimatePresence>
 
         <p className="text-xs text-[var(--color-text-tertiary)]">
-          The invited user receives an email with a temporary password. On first login they set a permanent password and enroll MFA.
-          <strong className="font-medium text-[var(--color-text-secondary)]"> Members</strong> can view reports and launch the workspace.{' '}
+          The invited user receives an email with a temporary password. On first login they set a permanent password and enroll MFA.{' '}
+          <strong className="font-medium text-[var(--color-text-secondary)]">Members</strong> can view reports and launch the workspace.{' '}
           <strong className="font-medium text-[var(--color-text-secondary)]">Admins</strong> can also manage integrations and invite others.
         </p>
       </div>
@@ -193,7 +412,11 @@ export default function TeamPage() {
         ) : error ? (
           <p className="p-5 text-sm text-red-600">{error}</p>
         ) : members.length === 0 ? (
-          <p className="p-5 text-sm text-[var(--color-text-secondary)]">No members yet. Invite your first team member above.</p>
+          <p className="p-5 text-sm text-[var(--color-text-secondary)]">
+            {isSuperAdmin && !activeTenantId
+              ? 'Select a tenant above to view its members.'
+              : 'No members yet. Invite your first team member above.'}
+          </p>
         ) : (
           <ul className="divide-y divide-[var(--color-border)]">
             {members.map((m) => (
