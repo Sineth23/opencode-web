@@ -1388,6 +1388,32 @@ export default function AssistantPage() {
         {/* Knowledge bases */}
         <div className="px-3 pb-2 flex-shrink-0">
           <DatasetManager activeTenantId={activeTenantId ?? undefined} />
+          {ragDatasets.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)] mb-1 px-1">
+                Chat with knowledge base
+              </p>
+              <select
+                value={activeRagId}
+                onChange={(e) => {
+                  setActiveRagId(e.target.value)
+                  setMessages([])
+                  if (e.target.value) setActiveThread(null)
+                }}
+                className={`w-full text-[12px] rounded-[var(--radius-md)] border px-2 py-1.5 ${
+                  activeRagId
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-300'
+                    : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                }`}
+              >
+                <option value="">— select to query —</option>
+                {ragDatasets.length > 1 && <option value="all">All knowledge bases</option>}
+                {ragDatasets.map((d) => (
+                  <option key={d.datasetId} value={d.datasetId}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Thread list */}
