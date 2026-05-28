@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { authorizedFetch } from '@/lib/api'
 import { isCognitoConfigured } from '@/lib/cognito'
 import { cdkGet } from '@/lib/cdk-api'
+import { subscribeToActiveTenant, getActiveTenantId } from '@/lib/use-super-admin'
 
 export type WorkspaceSummary = {
   id: string
@@ -47,7 +48,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       if (isCognitoConfigured()) {
         // Use CDK API — tenant is the equivalent of a workspace
-        const data = await cdkGet<TenantResponse>('/tenant')
+        // SuperAdmin: pass ?tenantId= when they've switched to another tenant
+        const overrideId = getActiveTenantId()
+        const endpoint = overrideId ? `/tenant?tenantId=${overrideId}` : '/tenant'
+        const data = await cdkGet<TenantResponse>(endpoint)
         if (data.ok && data.tenant) {
           setWorkspace({
             id: data.tenant.tenantId,
@@ -91,6 +95,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh()
+  }, [refresh])
+
+  // Re-fetch workspace when SuperAdmin switches active tenant
+  useEffect(() => {
+    return subscribeToActiveTenant(() => void refresh())
   }, [refresh])
 
   return (

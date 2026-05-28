@@ -25,6 +25,15 @@ export function setGlobalActiveTenant(id: string | null) {
   notifyListeners()
 }
 
+export function getActiveTenantId(): string | null {
+  return _activeTenantId
+}
+
+export function subscribeToActiveTenant(fn: () => void): () => void {
+  _listeners.add(fn)
+  return () => { _listeners.delete(fn) }
+}
+
 function decodeJwtGroups(token: string): string[] {
   try {
     const payload = token.split('.')[1]
