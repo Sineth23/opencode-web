@@ -26,6 +26,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useWorkspace } from '@/components/providers/WorkspaceContext'
 import { authorizedFetch } from '@/lib/api'
+import { isSupabaseInitialized } from '@/lib/supabase'
 import { withSupportContact } from '@/lib/support-copy'
 import { Skeleton } from '@/components/ui/Skeleton'
 import DatasetManager from '@/components/assistant/DatasetManager'
@@ -403,10 +404,12 @@ function AssistantMarkdown({
 function SourceCards({
   sources,
   onOpenCodeSnippet,
+  onOpenCodeInline,
   onOpenDocSection,
 }: {
   sources: SourceRef[]
   onOpenCodeSnippet: (path: string, label: string) => void
+  onOpenCodeInline: (code: string, lang: string, label: string) => void
   onOpenDocSection: (sectionId: string, label: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -459,7 +462,8 @@ function SourceCards({
               <button
                 key={i}
                 onClick={() => {
-                  if (s.path) onOpenCodeSnippet(s.path, s.label)
+                  if (s.content) onOpenCodeInline(s.content, detectLanguage(s.path ?? ''), s.label)
+                  else if (s.path) onOpenCodeSnippet(s.path, s.label)
                 }}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono
                   border transition-all duration-100
@@ -726,6 +730,9 @@ export default function AssistantPage() {
   const { workspace } = useWorkspace()
   const { activeTenantId } = useSuperAdmin()
 
+  // Regular chat threads require Supabase. When only Cognito is configured, disable thread UI.
+  const threadsEnabled = isSupabaseInitialized()
+
   const [threads, setThreads] = useState<Thread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
   const [activeThread, setActiveThread] = useState<Thread | null>(null)
@@ -947,8 +954,8 @@ export default function AssistantPage() {
   )
 
   useEffect(() => {
-    void refreshThreads({ autoSelect: true })
-  }, [refreshThreads])
+    if (threadsEnabled) void refreshThreads({ autoSelect: true })
+  }, [refreshThreads, threadsEnabled])
 
   useEffect(() => {
     const rm = activeThread?.response_mode
@@ -1437,24 +1444,26 @@ export default function AssistantPage() {
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside className="w-[228px] flex-shrink-0 flex flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)]">
-        <div className="px-4 pt-5 pb-3 flex-shrink-0">
-          <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)] mb-3">
-            Conversations
-          </p>
-          <button
-            onClick={() => void createThread()}
-            className="flex items-center gap-2 w-full rounded-[var(--radius-md)] px-3 py-2.5
-              text-[13px] text-[var(--color-text-secondary)] font-medium
-              border border-dashed border-[var(--color-border)] hover:border-primary/60 hover:text-primary
-              hover:bg-[var(--color-accent-light)] transition-all duration-150"
-          >
-            <PlusIcon className="h-3.5 w-3.5 flex-shrink-0" />
-            Start new chat
-          </button>
-          {createError && (
-            <p className="mt-2 text-[11px] text-red-600 leading-snug">{createError}</p>
-          )}
-        </div>
+        {threadsEnabled && (
+          <div className="px-4 pt-5 pb-3 flex-shrink-0">
+            <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)] mb-3">
+              Conversations
+            </p>
+            <button
+              onClick={() => void createThread()}
+              className="flex items-center gap-2 w-full rounded-[var(--radius-md)] px-3 py-2.5
+                text-[13px] text-[var(--color-text-secondary)] font-medium
+                border border-dashed border-[var(--color-border)] hover:border-primary/60 hover:text-primary
+                hover:bg-[var(--color-accent-light)] transition-all duration-150"
+            >
+              <PlusIcon className="h-3.5 w-3.5 flex-shrink-0" />
+              Start new chat
+            </button>
+            {createError && (
+              <p className="mt-2 text-[11px] text-red-600 leading-snug">{createError}</p>
+            )}
+          </div>
+        )}
 
         {/* Scope status badge */}
         {(activeRepo || totalChunks > 0) && (
@@ -1512,7 +1521,7 @@ export default function AssistantPage() {
 
         {/* Thread list */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {threadsLoading && (
+          {threadsEnabled && threadsLoading && (
             <div className="px-3 pt-1 space-y-0.5" aria-hidden="true">
               {[60, 80, 45, 70, 55].map((w, i) => (
                 <div key={i} className="px-1 py-3 border-b border-[var(--color-border)]/40">
@@ -1521,11 +1530,6 @@ export default function AssistantPage() {
                 </div>
               ))}
             </div>
-          )}
-          {!threadsLoading && threads.length === 0 && (
-            <p className="px-4 py-4 text-xs text-[var(--color-text-tertiary)] leading-relaxed">
-              No conversations yet.
-            </p>
           )}
           {/* RAG conversation history */}
           {ragConversations.length > 0 && (
@@ -1565,13 +1569,13 @@ export default function AssistantPage() {
             </div>
           )}
 
-          {ragConversations.length > 0 && threads.length > 0 && (
+          {threadsEnabled && ragConversations.length > 0 && threads.length > 0 && (
             <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)]">
               Conversations
             </p>
           )}
 
-          {threads.map((t) => {
+          {threadsEnabled && threads.map((t) => {
             const active = t.id === activeThread?.id
             return (
               <button
@@ -1622,7 +1626,7 @@ export default function AssistantPage() {
       <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-surface)] relative overflow-hidden">
 
         {/* Loading state */}
-        {threadsLoading && (
+        {threadsEnabled && threadsLoading && (
           <>
             <div className="flex-shrink-0 flex items-center gap-3 px-5 border-b border-[var(--color-border)]" style={{ height: 56 }}>
               <Skeleton className="h-4" style={{ width: 180 }} />
@@ -1935,6 +1939,7 @@ export default function AssistantPage() {
                               <SourceCards
                                 sources={msg.sources}
                                 onOpenCodeSnippet={openCodeFromPath}
+                                onOpenCodeInline={openCodeInline}
                                 onOpenDocSection={openDocFromId}
                               />
                             )}
@@ -2066,7 +2071,7 @@ export default function AssistantPage() {
               </div>
             </div>
           </>
-        ) : !threadsLoading && creatingThread ? (
+        ) : threadsEnabled && !threadsLoading && creatingThread ? (
           <div className="flex-1 flex flex-col items-center justify-center px-10" role="status" aria-live="polite" aria-busy="true">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -2085,7 +2090,7 @@ export default function AssistantPage() {
               </p>
             </motion.div>
           </div>
-        ) : !threadsLoading ? (
+        ) : (!threadsEnabled || !threadsLoading) ? (
 
           /* ── Welcome state ────────────────────────────────────────────── */
           <div className="flex-1 flex flex-col items-center justify-center px-10">
@@ -2113,18 +2118,20 @@ export default function AssistantPage() {
                 Ask how features work, where logic lives, what data models exist, how components relate, or whether a change is safe to make.
               </p>
 
-              {createError && (
+              {threadsEnabled && createError && (
                 <div className="mb-4 px-3 py-2.5 rounded-xl bg-red-50 text-red-700 text-[13px] leading-snug border border-red-200">
                   {createError}
                 </div>
               )}
 
-              <button onClick={() => void createThread()} className="pk-btn-primary gap-2 mb-8 w-full sm:w-auto">
-                <PlusIcon className="h-4 w-4" />
-                Start a conversation
-              </button>
+              {threadsEnabled && (
+                <button onClick={() => void createThread()} className="pk-btn-primary gap-2 mb-8 w-full sm:w-auto">
+                  <PlusIcon className="h-4 w-4" />
+                  Start a conversation
+                </button>
+              )}
 
-              {threads.length > 0 && (
+              {threadsEnabled && threads.length > 0 && (
                 <div className="mb-8">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-tertiary)] mb-3">Recent</p>
                   <div className="space-y-1">
@@ -2145,24 +2152,26 @@ export default function AssistantPage() {
                 </div>
               )}
 
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-tertiary)] mb-3">Try asking</p>
-                <div className="space-y-1.5">
-                  {STARTERS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={async () => { pendingMsg.current = s; await createThread() }}
-                      className="w-full text-left text-[13px] px-3 py-2.5 rounded-xl
-                        border border-[var(--color-border)] text-[var(--color-text-secondary)]
-                        hover:border-primary/50 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-accent-light)]
-                        transition-all duration-150"
-                    >
-                      <span className="mr-2 text-[var(--color-text-tertiary)]">→</span>
-                      {s}
-                    </button>
-                  ))}
+              {threadsEnabled && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-tertiary)] mb-3">Try asking</p>
+                  <div className="space-y-1.5">
+                    {STARTERS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={async () => { pendingMsg.current = s; await createThread() }}
+                        className="w-full text-left text-[13px] px-3 py-2.5 rounded-xl
+                          border border-[var(--color-border)] text-[var(--color-text-secondary)]
+                          hover:border-primary/50 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-accent-light)]
+                          transition-all duration-150"
+                      >
+                        <span className="mr-2 text-[var(--color-text-tertiary)]">→</span>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </motion.div>
           </div>
         ) : null}
