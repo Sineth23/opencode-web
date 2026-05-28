@@ -757,11 +757,12 @@ export default function AssistantPage() {
   const [activeRagId, setActiveRagId]   = useState<string>('') // '' = OpenCode SSE | 'all' | datasetId
   const [ragModel, setRagModel]         = useState<string>('us.anthropic.claude-haiku-4-5-20251001-v1:0')
 
-  // RAG conversation persistence
-  type RagConv = { id: string; dataset_id: string; dataset_name: string; model: string; title: string; updated_at: string }
+  // RAG conversation persistence (localStorage)
+  type RagConv = { id: string; dataset_id: string; dataset_name: string; model: string; title: string; updated_at: string; messages?: Msg[] }
+  const RAG_STORAGE_KEY = workspace?.id ? `rag_convs_${workspace.id}` : null
   const [ragConversations, setRagConversations] = useState<RagConv[]>([])
   const [activeRagConvId, setActiveRagConvId]   = useState<string | null>(null)
-  const [ragConvsLoading, setRagConvsLoading]   = useState(false)
+  const ragConvsLoading = false
 
   // Side canvas: inline code from markdown, fetched snippet by path, or full handbook article
   const [canvas, setCanvas] = useState<CanvasState | null>(null)
@@ -962,41 +963,46 @@ export default function AssistantPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTenantId])
 
-  // ── Load RAG conversation history ─────────────────────────────────────────
-  const refreshRagConversations = useCallback(async () => {
-    if (!workspace?.id) return
-    setRagConvsLoading(true)
-    try {
-      const r = await authorizedFetch(`/api/assistant/rag-conversations?workspace_id=${workspace.id}`)
-      if (r.ok) {
-        const d = (await r.json()) as { conversations: RagConv[] }
-        setRagConversations(d.conversations ?? [])
-      }
-    } catch { /* silently ignore — table may not be set up yet */ }
-    finally { setRagConvsLoading(false) }
-  }, [workspace?.id])
+  // ── RAG conversation history (localStorage) ───────────────────────────────
+  const _loadStoredConvs = useCallback((): RagConv[] => {
+    if (!RAG_STORAGE_KEY) return []
+    try { return JSON.parse(localStorage.getItem(RAG_STORAGE_KEY) ?? '[]') as RagConv[] }
+    catch { return [] }
+  }, [RAG_STORAGE_KEY])
 
-  useEffect(() => { void refreshRagConversations() }, [refreshRagConversations])
+  const _saveStoredConvs = useCallback((convs: RagConv[]) => {
+    if (!RAG_STORAGE_KEY) return
+    // Store last 50, strip messages from index to keep size small
+    const index = convs.slice(0, 50).map(({ messages: _m, ...rest }) => rest)
+    localStorage.setItem(RAG_STORAGE_KEY, JSON.stringify(index))
+  }, [RAG_STORAGE_KEY])
 
-  const deleteRagConversation = useCallback(async (id: string, e: React.MouseEvent) => {
+  const refreshRagConversations = useCallback(() => {
+    setRagConversations(_loadStoredConvs())
+  }, [_loadStoredConvs])
+
+  useEffect(() => { refreshRagConversations() }, [refreshRagConversations])
+
+  const deleteRagConversation = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!confirm('Delete this RAG conversation?')) return
-    await authorizedFetch(`/api/assistant/rag-conversations/${id}`, { method: 'DELETE' })
-    setRagConversations((prev) => prev.filter((c) => c.id !== id))
+    const updated = _loadStoredConvs().filter((c) => c.id !== id)
+    _saveStoredConvs(updated)
+    setRagConversations(updated)
     if (activeRagConvId === id) { setActiveRagConvId(null); setMessages([]) }
-  }, [activeRagConvId])
+  }, [activeRagConvId, _loadStoredConvs, _saveStoredConvs])
 
-  const loadRagConversation = useCallback(async (conv: RagConv) => {
+  const loadRagConversation = useCallback((conv: RagConv) => {
+    // Load full messages from per-conv key
+    let msgs: Msg[] = []
+    try {
+      const raw = localStorage.getItem(`rag_conv_${conv.id}`)
+      if (raw) msgs = (JSON.parse(raw) as Msg[]).map((m) => ({ ...m, clientId: newClientId() }))
+    } catch { /* ignore */ }
     setActiveRagId(conv.dataset_id)
     setRagModel(conv.model)
     setActiveRagConvId(conv.id)
     setActiveThread(null)
-    setMessages([])
-    // Fetch full messages
-    const r = await authorizedFetch(`/api/assistant/rag-conversations/${conv.id}`)
-    if (!r.ok) return
-    const d = (await r.json()) as { conversation: { messages: Msg[] } }
-    const msgs = (d.conversation.messages ?? []).map((m) => ({ ...m, clientId: newClientId() }))
     setMessages(msgs)
   }, [])
 
@@ -1212,35 +1218,32 @@ export default function AssistantPage() {
         }
         setMessages((m) => {
           const updated = [...m, asstMsg]
-          // Persist to database (fire-and-forget)
+          // Persist to localStorage
           const allMsgs = updated.map(({ role, content, sources: s }) => ({ role, content, sources: s }))
           const datasetName = ragDatasets.find((d) => d.datasetId === (activeRagId === 'all' ? ids[0] : activeRagId))?.name ?? activeRagId
-          if (activeRagConvId) {
-            // Update existing conversation
-            authorizedFetch(`/api/assistant/rag-conversations/${activeRagConvId}`, {
-              method: 'POST',
-              body: JSON.stringify({ id: activeRagConvId, messages: allMsgs }),
-            }).catch(console.error)
-          } else {
-            // Create new conversation, then store ID
-            authorizedFetch('/api/assistant/rag-conversations', {
-              method: 'POST',
-              body: JSON.stringify({
-                workspace_id: workspace!.id,
+          const convId = activeRagConvId ?? crypto.randomUUID()
+          if (!activeRagConvId) setActiveRagConvId(convId)
+          // Save full messages under per-conv key
+          try { localStorage.setItem(`rag_conv_${convId}`, JSON.stringify(allMsgs)) } catch { /* storage full */ }
+          // Upsert index entry
+          const now = new Date().toISOString()
+          const existing = _loadStoredConvs()
+          const idx = existing.findIndex((c) => c.id === convId)
+          const entry: RagConv = idx >= 0
+            ? { ...existing[idx]!, updated_at: now }
+            : {
+                id: convId,
                 dataset_id: activeRagId === 'all' ? 'all' : activeRagId,
                 dataset_name: activeRagId === 'all' ? 'All knowledge bases' : datasetName,
                 model: ragModel,
-                title: q.slice(0, 80),
-                messages: allMsgs,
-              }),
-            }).then(async (r) => {
-              if (r.ok) {
-                const d = (await r.json()) as { conversation: { id: string } }
-                setActiveRagConvId(d.conversation.id)
-                void refreshRagConversations()
+                title: q.slice(0, 80) || 'RAG conversation',
+                updated_at: now,
               }
-            }).catch(console.error)
-          }
+          const updated2 = idx >= 0
+            ? [entry, ...existing.filter((c) => c.id !== convId)]
+            : [entry, ...existing]
+          _saveStoredConvs(updated2)
+          setRagConversations(updated2.slice(0, 50))
           return updated
         })
         if (sources.length > 0) autoOpenFromSources(sources)
