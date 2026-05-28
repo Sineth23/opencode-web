@@ -50,10 +50,11 @@ export function deleteDataset(datasetId: string) {
   return cdkDelete<{ ok: boolean }>(`/assistant/datasets/${datasetId}`)
 }
 
-export function queryAssistant(question: string, datasetIds: string[], tenantId?: string) {
+export function queryAssistant(question: string, datasetIds: string[], tenantId?: string, model?: string) {
   return cdkPost<{ ok: boolean; answer: string; sources: QuerySource[] }>('/assistant/query', {
     question,
     datasetIds,
     ...(tenantId ? { tenantId } : {}),
+    ...(model ? { model } : {}),
   })
 }

@@ -41,7 +41,7 @@ type MdTdProps = ComponentPropsWithoutRef<'td'> & ExtraProps
 
 type Persona = 'pm' | 'developer' | 'executive'
 
-type SourceRef = { label: string; path?: string; doc_section_id?: string; confidence: string }
+type SourceRef = { label: string; path?: string; doc_section_id?: string; confidence: string; content?: string }
 
 /** Right-hand canvas: code excerpt or full handbook article */
 type CanvasState =
@@ -755,6 +755,7 @@ export default function AssistantPage() {
   // RAG knowledge-base query mode
   const [ragDatasets, setRagDatasets]   = useState<Dataset[]>([])
   const [activeRagId, setActiveRagId]   = useState<string>('') // '' = OpenCode SSE | 'all' | datasetId
+  const [ragModel, setRagModel]         = useState<string>('us.anthropic.claude-haiku-4-5-20251001-v1:0')
 
   // Side canvas: inline code from markdown, fetched snippet by path, or full handbook article
   const [canvas, setCanvas] = useState<CanvasState | null>(null)
@@ -872,9 +873,16 @@ export default function AssistantPage() {
         sources.find((s) => s.path && s.confidence === 'high') ??
         sources.find((s) => s.path && s.confidence === 'medium') ??
         sources.find((s) => s.path)
-      if (code?.path) void openCodeFromPath(code.path, code.label)
+      if (code) {
+        if (code.content) {
+          // RAG sources: we already have the chunk content, show it directly
+          openCodeInline(code.content, detectLanguage(code.path ?? ''), code.label)
+        } else if (code.path) {
+          void openCodeFromPath(code.path, code.label)
+        }
+      }
     },
-    [openDocFromId, openCodeFromPath]
+    [openDocFromId, openCodeFromPath, openCodeInline]
   )
 
   /** Defer opening the side canvas until the first streamed token (avoids layout jump during "thinking"). */
@@ -1141,11 +1149,12 @@ export default function AssistantPage() {
       if (inputRef.current) inputRef.current.style.height = 'auto'
       setMessages((m) => [...m, { role: 'user', content: q, clientId: newClientId() }])
       try {
-        const result = await queryAssistant(q, ids, activeTenantId ?? undefined)
+        const result = await queryAssistant(q, ids, activeTenantId ?? undefined, ragModel)
         const sources: SourceRef[] = result.sources.map((s) => ({
           label: s.filePath.split('/').pop() ?? s.filePath,
           path: s.filePath,
           confidence: 'high' as const,
+          content: s.content,
         }))
         setMessages((m) => [...m, {
           role: 'assistant',
@@ -1568,6 +1577,21 @@ export default function AssistantPage() {
                     <option key={d.datasetId} value={d.datasetId}>{d.name}</option>
                   ))}
                 </select>
+
+                {/* Model selector (RAG mode only) */}
+                {activeRagId && (
+                  <select
+                    value={ragModel}
+                    onChange={(e) => setRagModel(e.target.value)}
+                    className="text-[12px] rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1.5 pr-6 bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
+                    title="Claude model to use for answering"
+                  >
+                    <option value="us.anthropic.claude-haiku-4-5-20251001-v1:0">Haiku 4.5 (fast)</option>
+                    <option value="us.anthropic.claude-sonnet-4-5-20251001-v1:0">Sonnet 4.5 (balanced)</option>
+                    <option value="us.anthropic.claude-sonnet-4-6-20251101-v1:0">Sonnet 4.6 (latest)</option>
+                    <option value="us.anthropic.claude-opus-4-7-20251101-v1:0">Opus 4.7 (best quality)</option>
+                  </select>
+                )}
 
                 {!activeRagId && activeThread && (
                   <>
