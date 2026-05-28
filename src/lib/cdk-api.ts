@@ -1,8 +1,16 @@
 import { cognitoGetIdToken } from '@/lib/cognito'
+import { getActiveTenantId } from '@/lib/use-super-admin'
 
 const CDK_API_URL =
   process.env.NEXT_PUBLIC_CDK_API_URL ||
   'https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com'
+
+function withTenantId(path: string): string {
+  const tid = getActiveTenantId()
+  if (!tid) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}tenantId=${encodeURIComponent(tid)}`
+}
 
 export async function cdkFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = await cognitoGetIdToken()
@@ -12,7 +20,7 @@ export async function cdkFetch(path: string, init: RequestInit = {}): Promise<Re
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json')
   }
-  return fetch(`${CDK_API_URL}${path}`, { ...init, headers })
+  return fetch(`${CDK_API_URL}${withTenantId(path)}`, { ...init, headers })
 }
 
 export async function cdkGet<T = unknown>(path: string): Promise<T> {
