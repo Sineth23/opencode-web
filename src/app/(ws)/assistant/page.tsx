@@ -47,6 +47,7 @@ type SourceRef = { label: string; path?: string; doc_section_id?: string; confid
 /** Right-hand canvas: code excerpt or full handbook article */
 type CanvasState =
   | { kind: 'code'; code: string; lang: string; label: string }
+  | { kind: 'excerpt'; text: string; label: string; path?: string }
   | {
       kind: 'doc'
       sectionId: string
@@ -409,7 +410,7 @@ function SourceCards({
 }: {
   sources: SourceRef[]
   onOpenCodeSnippet: (path: string, label: string) => void
-  onOpenCodeInline: (code: string, lang: string, label: string) => void
+  onOpenCodeInline: (code: string, lang: string, label: string, path?: string) => void
   onOpenDocSection: (sectionId: string, label: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -462,7 +463,7 @@ function SourceCards({
               <button
                 key={i}
                 onClick={() => {
-                  if (s.content) onOpenCodeInline(s.content, detectLanguage(s.path ?? ''), s.label)
+                  if (s.content) onOpenCodeInline(s.content, detectLanguage(s.path ?? ''), s.label, s.path)
                   else if (s.path) onOpenCodeSnippet(s.path, s.label)
                 }}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono
@@ -583,6 +584,40 @@ function CodeCanvas({
 }
 
 /** Handbook article in the side canvas: readable surface, same markdown treatment as answers */
+function ExcerptCanvas({ text, label, path, onClose }: { text: string; label: string; path?: string; onClose: () => void }) {
+  return (
+    <div className="flex flex-col h-full w-full bg-[var(--color-surface)]">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]/50">
+        <div className="flex items-center gap-2 min-w-0 pr-2">
+          <DocumentTextIcon className="h-4 w-4 text-primary flex-shrink-0" />
+          <div className="min-w-0">
+            <span className="text-[13px] font-semibold text-[var(--color-text-primary)] leading-snug block truncate">{label}</span>
+            {path && path !== label && (
+              <span className="text-[10px] text-[var(--color-text-tertiary)] font-mono truncate block">{path}</span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors flex-shrink-0"
+          aria-label="Close panel"
+        >
+          <XMarkIcon className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Source excerpt</p>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-5 py-4">
+          <p className="text-[13px] leading-[1.75] text-[var(--color-text-primary)] whitespace-pre-wrap break-words font-sans">
+            {text}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DocCanvas({
   title,
   category,
@@ -774,10 +809,9 @@ export default function AssistantPage() {
   // Side canvas: inline code from markdown, fetched snippet by path, or full handbook article
   const [canvas, setCanvas] = useState<CanvasState | null>(null)
 
-  const openCodeInline = useCallback((code: string, lang: string, label: string) => {
-    // Markdown/text content renders better in DocCanvas than the code highlighter
+  const openCodeInline = useCallback((code: string, lang: string, label: string, path?: string) => {
     if (lang === 'markdown' || lang === 'text' || lang === 'plaintext') {
-      setCanvas({ kind: 'doc', sectionId: label, title: label, body_md: code, loading: false })
+      setCanvas({ kind: 'excerpt', text: code, label, path })
     } else {
       setCanvas({ kind: 'code', code, lang, label })
     }
@@ -895,7 +929,7 @@ export default function AssistantPage() {
       if (code) {
         if (code.content) {
           // RAG sources: we already have the chunk content, show it directly
-          openCodeInline(code.content, detectLanguage(code.path ?? ''), code.label)
+          openCodeInline(code.content, detectLanguage(code.path ?? ''), code.label, code.path)
         } else if (code.path) {
           void openCodeFromPath(code.path, code.label)
         }
@@ -1977,27 +2011,34 @@ export default function AssistantPage() {
               <AnimatePresence mode="wait">
                 {canvas && (
                   <motion.div
-                    key={canvas.kind === 'doc' ? `doc-${canvas.sectionId}` : `code-${canvas.label}`}
+                    key={canvas.kind === 'doc' ? `doc-${canvas.sectionId}` : canvas.kind === 'excerpt' ? `excerpt-${canvas.label}` : `code-${canvas.label}`}
                     initial={{ width: 0, opacity: 0 }}
                     animate={{
-                      width: canvas.kind === 'doc' ? 460 : 420,
+                      width: canvas.kind === 'doc' || canvas.kind === 'excerpt' ? 460 : 420,
                       opacity: 1,
                     }}
                     exit={{ width: 0, opacity: 0 }}
                     transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
                     className={`flex-shrink-0 border-l border-[var(--color-border)] overflow-hidden ${
-                      canvas.kind === 'doc' ? 'bg-[var(--color-bg-secondary)]' : 'bg-[#18181b]'
+                      canvas.kind === 'code' ? 'bg-[#18181b]' : 'bg-[var(--color-bg-secondary)]'
                     }`}
                     style={{ willChange: 'width' }}
                   >
                     <div
-                      className={`h-full flex flex-col ${canvas.kind === 'doc' ? 'w-[460px]' : 'w-[420px]'}`}
+                      className={`h-full flex flex-col ${canvas.kind === 'code' ? 'w-[420px]' : 'w-[460px]'}`}
                     >
                       {canvas.kind === 'code' ? (
                         <CodeCanvas
                           code={canvas.code}
                           lang={canvas.lang}
                           label={canvas.label}
+                          onClose={() => setCanvas(null)}
+                        />
+                      ) : canvas.kind === 'excerpt' ? (
+                        <ExcerptCanvas
+                          text={canvas.text}
+                          label={canvas.label}
+                          path={canvas.path}
                           onClose={() => setCanvas(null)}
                         />
                       ) : (
