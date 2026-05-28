@@ -351,14 +351,14 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                                   type="text"
                                   value={customPrefix}
                                   onChange={(e) => setCustomPrefix(e.target.value)}
-                                  placeholder="e.g. projects/default/repos/my-repo/.../worktree/"
+                                  placeholder="projects/KlickInc/sred/klick-2025-sred-final-package/"
                                   className="w-full text-sm font-mono rounded-lg border border-[var(--color-border)] px-3 py-2
                                     bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]
                                     placeholder:text-[var(--color-text-tertiary)]
                                     focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
                                 />
                                 <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
-                                  Copy from the S3 browser. All text files under this prefix will be indexed.
+                                  Path within your bucket — no <code className="font-mono">s3://</code> or bucket name. e.g. <code className="font-mono">projects/MyOrg/sred/2025/</code>
                                 </p>
                               </div>
                             </div>
