@@ -775,7 +775,12 @@ export default function AssistantPage() {
   const [canvas, setCanvas] = useState<CanvasState | null>(null)
 
   const openCodeInline = useCallback((code: string, lang: string, label: string) => {
-    setCanvas({ kind: 'code', code, lang, label })
+    // Markdown/text content renders better in DocCanvas than the code highlighter
+    if (lang === 'markdown' || lang === 'text' || lang === 'plaintext') {
+      setCanvas({ kind: 'doc', sectionId: label, title: label, body_md: code, loading: false })
+    } else {
+      setCanvas({ kind: 'code', code, lang, label })
+    }
   }, [])
 
   const openDocFromId = useCallback(async (sectionId: string, title: string) => {
