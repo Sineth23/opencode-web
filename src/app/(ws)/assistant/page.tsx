@@ -757,6 +757,12 @@ export default function AssistantPage() {
   const [activeRagId, setActiveRagId]   = useState<string>('') // '' = OpenCode SSE | 'all' | datasetId
   const [ragModel, setRagModel]         = useState<string>('us.anthropic.claude-haiku-4-5-20251001-v1:0')
 
+  // RAG conversation persistence
+  type RagConv = { id: string; dataset_id: string; dataset_name: string; model: string; title: string; updated_at: string }
+  const [ragConversations, setRagConversations] = useState<RagConv[]>([])
+  const [activeRagConvId, setActiveRagConvId]   = useState<string | null>(null)
+  const [ragConvsLoading, setRagConvsLoading]   = useState(false)
+
   // Side canvas: inline code from markdown, fetched snippet by path, or full handbook article
   const [canvas, setCanvas] = useState<CanvasState | null>(null)
 
@@ -956,6 +962,44 @@ export default function AssistantPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTenantId])
 
+  // ── Load RAG conversation history ─────────────────────────────────────────
+  const refreshRagConversations = useCallback(async () => {
+    if (!workspace?.id) return
+    setRagConvsLoading(true)
+    try {
+      const r = await authorizedFetch(`/api/assistant/rag-conversations?workspace_id=${workspace.id}`)
+      if (r.ok) {
+        const d = (await r.json()) as { conversations: RagConv[] }
+        setRagConversations(d.conversations ?? [])
+      }
+    } catch { /* silently ignore — table may not be set up yet */ }
+    finally { setRagConvsLoading(false) }
+  }, [workspace?.id])
+
+  useEffect(() => { void refreshRagConversations() }, [refreshRagConversations])
+
+  const deleteRagConversation = useCallback(async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm('Delete this RAG conversation?')) return
+    await authorizedFetch(`/api/assistant/rag-conversations/${id}`, { method: 'DELETE' })
+    setRagConversations((prev) => prev.filter((c) => c.id !== id))
+    if (activeRagConvId === id) { setActiveRagConvId(null); setMessages([]) }
+  }, [activeRagConvId])
+
+  const loadRagConversation = useCallback(async (conv: RagConv) => {
+    setActiveRagId(conv.dataset_id)
+    setRagModel(conv.model)
+    setActiveRagConvId(conv.id)
+    setActiveThread(null)
+    setMessages([])
+    // Fetch full messages
+    const r = await authorizedFetch(`/api/assistant/rag-conversations/${conv.id}`)
+    if (!r.ok) return
+    const d = (await r.json()) as { conversation: { messages: Msg[] } }
+    const msgs = (d.conversation.messages ?? []).map((m) => ({ ...m, clientId: newClientId() }))
+    setMessages(msgs)
+  }, [])
+
   // ── Load scope repos ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!workspace?.id) return
@@ -1150,7 +1194,8 @@ export default function AssistantPage() {
       setThinking(true)
       setInput('')
       if (inputRef.current) inputRef.current.style.height = 'auto'
-      setMessages((m) => [...m, { role: 'user', content: q, clientId: newClientId() }])
+      const userMsg: Msg = { role: 'user', content: q, clientId: newClientId() }
+      setMessages((m) => [...m, userMsg])
       try {
         const result = await queryAssistant(q, ids, activeTenantId ?? undefined, ragModel)
         const sources: SourceRef[] = result.sources.map((s) => ({
@@ -1159,12 +1204,45 @@ export default function AssistantPage() {
           confidence: 'high' as const,
           content: s.content,
         }))
-        setMessages((m) => [...m, {
+        const asstMsg: Msg = {
           role: 'assistant',
           content: result.answer,
           sources: sources.length > 0 ? sources : undefined,
           clientId: newClientId(),
-        }])
+        }
+        setMessages((m) => {
+          const updated = [...m, asstMsg]
+          // Persist to database (fire-and-forget)
+          const allMsgs = updated.map(({ role, content, sources: s }) => ({ role, content, sources: s }))
+          const datasetName = ragDatasets.find((d) => d.datasetId === (activeRagId === 'all' ? ids[0] : activeRagId))?.name ?? activeRagId
+          if (activeRagConvId) {
+            // Update existing conversation
+            authorizedFetch(`/api/assistant/rag-conversations/${activeRagConvId}`, {
+              method: 'POST',
+              body: JSON.stringify({ id: activeRagConvId, messages: allMsgs }),
+            }).catch(console.error)
+          } else {
+            // Create new conversation, then store ID
+            authorizedFetch('/api/assistant/rag-conversations', {
+              method: 'POST',
+              body: JSON.stringify({
+                workspace_id: workspace!.id,
+                dataset_id: activeRagId === 'all' ? 'all' : activeRagId,
+                dataset_name: activeRagId === 'all' ? 'All knowledge bases' : datasetName,
+                model: ragModel,
+                title: q.slice(0, 80),
+                messages: allMsgs,
+              }),
+            }).then(async (r) => {
+              if (r.ok) {
+                const d = (await r.json()) as { conversation: { id: string } }
+                setActiveRagConvId(d.conversation.id)
+                void refreshRagConversations()
+              }
+            }).catch(console.error)
+          }
+          return updated
+        })
         if (sources.length > 0) autoOpenFromSources(sources)
       } catch (e) {
         setMessages((m) => [...m, {
@@ -1410,6 +1488,7 @@ export default function AssistantPage() {
                 onChange={(e) => {
                   setActiveRagId(e.target.value)
                   setMessages([])
+                  setActiveRagConvId(null)
                   if (e.target.value) setActiveThread(null)
                 }}
                 className={`w-full text-[12px] rounded-[var(--radius-md)] border px-2 py-1.5 ${
@@ -1445,6 +1524,50 @@ export default function AssistantPage() {
               No conversations yet.
             </p>
           )}
+          {/* RAG conversation history */}
+          {ragConversations.length > 0 && (
+            <div>
+              <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)]">
+                Knowledge base chats
+              </p>
+              {ragConversations.map((conv) => {
+                const active = conv.id === activeRagConvId
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => void loadRagConversation(conv)}
+                    className={[
+                      'group relative w-full text-left px-4 py-2.5 flex items-start gap-2',
+                      'transition-colors duration-100 border-b border-[var(--color-border)]/30',
+                      active ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'hover:bg-[var(--color-bg-secondary)]',
+                    ].join(' ')}
+                  >
+                    <CircleStackIcon className={`h-3.5 w-3.5 mt-0.5 flex-shrink-0 ${active ? 'text-emerald-600' : 'text-[var(--color-text-tertiary)]'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[12px] font-medium leading-snug truncate ${active ? 'text-emerald-700 dark:text-emerald-400' : 'text-[var(--color-text-primary)]'}`}>
+                        {conv.title ?? 'RAG conversation'}
+                      </p>
+                      <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5 truncate">{conv.dataset_name}</p>
+                    </div>
+                    <button
+                      onClick={(e) => void deleteRagConversation(conv.id, e)}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-[var(--color-text-tertiary)] hover:text-red-500"
+                      aria-label="Delete"
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {ragConversations.length > 0 && threads.length > 0 && (
+            <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)]">
+              Conversations
+            </p>
+          )}
+
           {threads.map((t) => {
             const active = t.id === activeThread?.id
             return (
@@ -1566,7 +1689,7 @@ export default function AssistantPage() {
                 {/* Knowledge-base selector */}
                 <select
                   value={activeRagId}
-                  onChange={(e) => { setActiveRagId(e.target.value); setMessages([]) }}
+                  onChange={(e) => { setActiveRagId(e.target.value); setMessages([]); setActiveRagConvId(null) }}
                   className={`text-[12px] rounded-[var(--radius-md)] border px-2 py-1.5 pr-6 ${
                     activeRagId
                       ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-300'
