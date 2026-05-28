@@ -1088,7 +1088,10 @@ export default function AssistantPage() {
       })
       const d = (await r.json()) as { thread?: Thread; error?: unknown }
       if (!r.ok) {
-        setCreateError('Could not create conversation.')
+        const errMsg = typeof d.error === 'string' ? d.error
+          : typeof d.error === 'object' && d.error !== null ? JSON.stringify(d.error)
+          : `HTTP ${r.status}`
+        setCreateError(`Could not create conversation: ${errMsg}`)
         const prev = previousThreadBeforeCreateRef.current
         previousThreadBeforeCreateRef.current = null
         if (prev) setActiveThread(prev)
