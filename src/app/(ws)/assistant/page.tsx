@@ -809,8 +809,6 @@ export default function AssistantPage() {
   const { workspace } = useWorkspace()
   const { activeTenantId } = useSuperAdmin()
 
-  // Regular chat threads require Supabase. When only Cognito is configured, disable thread UI.
-  const threadsEnabled = isSupabaseInitialized()
 
   const [threads, setThreads] = useState<Thread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
@@ -1009,40 +1007,35 @@ export default function AssistantPage() {
     return () => clearInterval(id)
   }, [thinking])
 
-  // ── Load threads ───────────────────────────────────────────────────────────
-  const refreshThreads = useCallback(
-    async (opts?: { autoSelect?: boolean; /** When true, update sidebar list without unmounting the main chat (no full-panel skeleton). */ soft?: boolean }) => {
-      if (!workspace?.id) return
-      const autoSelect = opts?.autoSelect ?? false
-      const soft = opts?.soft ?? false
-      if (!soft) setThreadsLoading(true)
-      try {
-        const r = await authorizedFetch(`/api/assistant/threads?workspace_id=${workspace.id}`)
-        const d = (await r.json()) as { threads?: Thread[] }
-        if (r.ok) {
-          const list = d.threads ?? []
-          setThreads(list)
-          const cur = activeRef.current
-          if (cur) {
-            const updated = list.find((t) => t.id === cur.id)
-            if (updated) setActiveThread(updated)
-          }
-          if (autoSelect && list.length > 0 && !activeRef.current) {
-            setActiveThread(list[0]!)
-          }
-        }
-      } catch (e) {
-        console.error(e)
-      } finally {
-        if (!soft) setThreadsLoading(false)
-      }
-    },
-    [workspace?.id]
-  )
+  // ── Load threads (localStorage) ────────────────────────────────────────────
+  const THREAD_STORAGE_KEY = workspace?.id ? `threads_${workspace.id}` : null
 
-  useEffect(() => {
-    if (threadsEnabled) void refreshThreads({ autoSelect: true })
-  }, [refreshThreads, threadsEnabled])
+  const refreshThreads = useCallback((opts?: { autoSelect?: boolean; soft?: boolean }) => {
+    if (!THREAD_STORAGE_KEY) return
+    const soft = opts?.soft ?? false
+    const autoSelect = opts?.autoSelect ?? false
+    if (!soft) setThreadsLoading(true)
+    try {
+      const list = JSON.parse(localStorage.getItem(THREAD_STORAGE_KEY) ?? '[]') as Thread[]
+      setThreads(list)
+      const cur = activeRef.current
+      if (cur) {
+        const updated = list.find((t) => t.id === cur.id)
+        if (updated) setActiveThread(updated)
+      }
+      if (autoSelect && list.length > 0 && !activeRef.current) {
+        setActiveThread(list[0]!)
+        // Restore messages for auto-selected thread
+        try {
+          const msgs = JSON.parse(localStorage.getItem(`thread_msgs_${list[0]!.id}`) ?? '[]') as Msg[]
+          setMessages(msgs.map((m) => ({ ...m, clientId: newClientId() })))
+        } catch { /* ignore */ }
+      }
+    } catch (e) { console.error(e) }
+    finally { if (!soft) setThreadsLoading(false) }
+  }, [THREAD_STORAGE_KEY])
+
+  useEffect(() => { refreshThreads({ autoSelect: true }) }, [refreshThreads])
 
   useEffect(() => {
     const rm = activeThread?.response_mode
@@ -1210,7 +1203,7 @@ export default function AssistantPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThread?.id])
 
-  // ── Create thread ──────────────────────────────────────────────────────────
+  // ── Create thread (localStorage) ──────────────────────────────────────────
   const createThread = useCallback(async (): Promise<Thread | null> => {
     if (!workspace?.id) { setCreateError('Workspace is loading: please wait a moment.'); return null }
     if (createThreadInFlightRef.current) return null
@@ -1222,33 +1215,18 @@ export default function AssistantPage() {
     setActiveThread(null)
     setMessages([])
     try {
-      const r = await authorizedFetch('/api/assistant/threads', {
-        method: 'POST',
-        body: JSON.stringify({
-          workspace_id: workspace.id,
-          persona: 'pm',
-          response_mode: assistantMode,
-        }),
-      })
-      const d = (await r.json()) as { thread?: Thread; error?: unknown }
-      if (!r.ok) {
-        const errMsg = typeof d.error === 'string' ? d.error
-          : typeof d.error === 'object' && d.error !== null ? JSON.stringify(d.error)
-          : `HTTP ${r.status}`
-        setCreateError(`Could not create conversation: ${errMsg}`)
-        const prev = previousThreadBeforeCreateRef.current
-        previousThreadBeforeCreateRef.current = null
-        if (prev) setActiveThread(prev)
-        return null
-      }
-      if (d.thread) {
-        setThreads((p) => [d.thread!, ...p])
-        setActiveThread(d.thread!)
-        previousThreadBeforeCreateRef.current = null
-        return d.thread!
-      }
+      const now = new Date().toISOString()
+      const thread: Thread = { id: crypto.randomUUID(), title: null, created_at: now, updated_at: now, persona: 'pm', response_mode: assistantMode }
+      const key = `threads_${workspace.id}`
+      const existing = JSON.parse(localStorage.getItem(key) ?? '[]') as Thread[]
+      const updated = [thread, ...existing].slice(0, 50)
+      localStorage.setItem(key, JSON.stringify(updated))
+      setThreads(updated)
+      setActiveThread(thread)
+      previousThreadBeforeCreateRef.current = null
+      return thread
     } catch {
-      setCreateError('Network error: check your connection.')
+      setCreateError('Could not create conversation.')
       const prev = previousThreadBeforeCreateRef.current
       previousThreadBeforeCreateRef.current = null
       if (prev) setActiveThread(prev)
@@ -1259,25 +1237,32 @@ export default function AssistantPage() {
     return null
   }, [workspace?.id, assistantMode])
 
-  // ── Delete thread ──────────────────────────────────────────────────────────
-  const removeThread = async (id: string, e: React.MouseEvent) => {
+  // ── Delete thread (localStorage) ──────────────────────────────────────────
+  const removeThread = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    const key = workspace?.id ? `threads_${workspace.id}` : null
+    if (key) {
+      const existing = JSON.parse(localStorage.getItem(key) ?? '[]') as Thread[]
+      localStorage.setItem(key, JSON.stringify(existing.filter((t) => t.id !== id)))
+    }
+    localStorage.removeItem(`thread_msgs_${id}`)
     setThreads((p) => p.filter((t) => t.id !== id))
     if (activeRef.current?.id === id) { setActiveThread(null); setMessages([]) }
-    await authorizedFetch(`/api/assistant/threads/${id}`, { method: 'DELETE' }).catch(console.error)
   }
 
-  // ── Save title ─────────────────────────────────────────────────────────────
-  const saveTitle = async () => {
+  // ── Save title (localStorage) ──────────────────────────────────────────────
+  const saveTitle = () => {
     setEditingTitle(false)
     const thread = activeRef.current
     if (!thread || !titleDraft.trim() || titleDraft.trim() === (thread.title ?? '')) return
     const title = titleDraft.trim()
     setActiveThread((t) => (t ? { ...t, title } : t))
-    setThreads((p) => p.map((t) => (t.id === thread.id ? { ...t, title } : t)))
-    await authorizedFetch(`/api/assistant/threads/${thread.id}`, {
-      method: 'PATCH', body: JSON.stringify({ title }),
-    }).catch(console.error)
+    setThreads((p) => {
+      const updated = p.map((t) => (t.id === thread.id ? { ...t, title } : t))
+      const key = workspace?.id ? `threads_${workspace.id}` : null
+      if (key) localStorage.setItem(key, JSON.stringify(updated))
+      return updated
+    })
   }
 
   // ── Send ───────────────────────────────────────────────────────────────────
@@ -1358,163 +1343,58 @@ export default function AssistantPage() {
     const thread = activeRef.current
     if (!thread) { pendingMsg.current = q; await createThread(); return }
 
+    // Thread mode uses RAG with all available datasets
+    if (ragDatasets.length === 0) {
+      setMessages((m) => [...m, { role: 'user', content: q, clientId: newClientId() }, {
+        role: 'assistant', content: 'No knowledge bases are indexed yet. Please index a repository first using the **Knowledge Bases** section in the sidebar.', low: true, clientId: newClientId(),
+      }])
+      return
+    }
+
     setSending(true)
     setThinking(true)
     pendingAutoOpenSourcesRef.current = null
     setInput('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
-    const userClientId = newClientId()
-    setMessages((m) => [...m, { role: 'user', content: q, clientId: userClientId }])
-
-    let streamingSources: SourceRef[] = []
-    let streamingLow = false
+    setMessages((m) => [...m, { role: 'user', content: q, clientId: newClientId() }])
 
     try {
-      const r = await authorizedFetch('/api/assistant/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          workspace_id: workspace.id,
-          thread_id: thread.id,
-          message: q,
-          mode: assistantMode,
-          persona: thread.persona ?? 'pm',
-          repository_id: scopeRepoId || null,
-          branch: scopeRepoId && scopeBranch ? scopeBranch : null,
-        }),
-      })
-
-      if (!r.ok || !r.body) {
-        setThinking(false)
-        let errMsg = 'Something went wrong. Please try again.'
-        try {
-          const d = (await r.json()) as { error?: string }
-          if (d.error && !/pk_|pgrst|postgres|schema|rpc\b|sql/i.test(d.error)) errMsg = d.error
-        } catch { /* ignore */ }
-        setMessages((m) => [...m, { role: 'assistant', content: withSupportContact(errMsg), low: true, clientId: newClientId() }])
-        return
+      const allIds = ragDatasets.map((d) => d.datasetId)
+      const result = await queryAssistant(q, allIds, activeTenantId ?? undefined, ragModel)
+      const sources: SourceRef[] = result.sources.map((s) => ({
+        label: s.filePath.split('/').pop() ?? s.filePath,
+        path: s.filePath,
+        confidence: 'high' as const,
+        content: s.content,
+      }))
+      const asstMsg: Msg = {
+        role: 'assistant',
+        content: result.answer,
+        sources: sources.length > 0 ? sources : undefined,
+        clientId: newClientId(),
       }
-
-      const reader = r.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let streamingContent = ''
-      let streamingMsgAdded = false
-      const assistantClientId = newClientId()
-
-      const flushBuffer = () => {
-        const blocks = buffer.split('\n\n')
-        buffer = blocks.pop() ?? ''
-        for (const block of blocks) {
-          if (!block.startsWith('data: ')) continue
-          let event: ChatSSEEvent
-          try { event = JSON.parse(block.slice(6)) as ChatSSEEvent } catch { continue }
-
-          if (event.type === 'meta') {
-            streamingSources = event.sources
-            streamingLow = event.lowGrounding
-            pendingAutoOpenSourcesRef.current = event.sources
-          } else if (event.type === 'phase') {
-            setThinkLabel(event.label)
-          } else if (event.type === 'token') {
-            if (!streamingMsgAdded) {
-              streamingMsgAdded = true
-              setThinking(false)
-              flushPendingAutoOpen()
-              setMessages((m) => [...m, { role: 'assistant', content: '', streaming: true, clientId: assistantClientId }])
-            }
-            streamingContent += event.content
-            setMessages((m) => {
-              const arr = [...m]
-              arr[arr.length - 1] = {
-                ...arr[arr.length - 1],
-                role: 'assistant',
-                content: streamingContent,
-                streaming: true,
-                clientId: assistantClientId,
-              }
-              return arr
-            })
-          } else if (event.type === 'done') {
-            setThinking(false)
-            flushPendingAutoOpen()
-            setMessages((m) => {
-              const arr = [...m]
-              const last = arr[arr.length - 1]
-              if (last?.role === 'assistant') {
-                arr[arr.length - 1] = {
-                  ...last,
-                  content: streamingContent || last.content || 'No response.',
-                  streaming: false,
-                  low: streamingLow,
-                  sources: streamingSources.length > 0 ? streamingSources : undefined,
-                  clientId: assistantClientId,
-                }
-              } else {
-                arr.push({
-                  role: 'assistant',
-                  content: streamingContent || 'No response.',
-                  streaming: false,
-                  low: streamingLow,
-                  sources: streamingSources.length > 0 ? streamingSources : undefined,
-                  clientId: assistantClientId,
-                })
-              }
-              return arr
-            })
-            void refreshThreads({ soft: true })
-          } else if (event.type === 'error') {
-            setThinking(false)
-            pendingAutoOpenSourcesRef.current = null
-            setMessages((m) => {
-              const arr = [...m]
-              const last = arr[arr.length - 1]
-              if (last?.role === 'assistant' && last.streaming) {
-                arr[arr.length - 1] = {
-                  ...last,
-                  role: 'assistant',
-                  content: event.message,
-                  streaming: false,
-                  low: true,
-                  clientId: last.clientId ?? assistantClientId,
-                }
-              } else {
-                arr.push({ role: 'assistant', content: event.message, low: true, streaming: false, clientId: newClientId() })
-              }
-              return arr
-            })
-          }
-        }
-      }
-
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        flushBuffer()
-      }
-      if (buffer) { buffer += '\n\n'; flushBuffer() }
-      flushPendingAutoOpen()
-
-    } catch {
-      setThinking(false)
-      pendingAutoOpenSourcesRef.current = null
       setMessages((m) => {
-        const arr = [...m]
-        const last = arr[arr.length - 1]
-        if (last?.role === 'assistant' && last.streaming) {
-          arr[arr.length - 1] = {
-            ...last,
-            role: 'assistant',
-            content: withSupportContact('Network error.'),
-            low: true,
-            streaming: false,
+        const updated = [...m, asstMsg]
+        // Persist thread messages + auto-generate title on first exchange
+        const allMsgs = updated.map(({ role, content, sources: s }) => ({ role, content, sources: s }))
+        try { localStorage.setItem(`thread_msgs_${thread.id}`, JSON.stringify(allMsgs)) } catch { /* storage full */ }
+        const isFirst = updated.filter((x) => x.role === 'user').length === 1
+        if (isFirst) {
+          const title = q.slice(0, 80) || 'New conversation'
+          const key = workspace?.id ? `threads_${workspace.id}` : null
+          if (key) {
+            const stored = JSON.parse(localStorage.getItem(key) ?? '[]') as Thread[]
+            const patched = stored.map((t) => t.id === thread.id ? { ...t, title, updated_at: new Date().toISOString() } : t)
+            localStorage.setItem(key, JSON.stringify(patched))
+            setThreads(patched)
+            setActiveThread((t) => t?.id === thread.id ? { ...t, title } : t)
           }
-        } else {
-          arr.push({ role: 'assistant', content: withSupportContact('Network error.'), low: true, clientId: newClientId() })
         }
-        return arr
+        return updated
       })
+      if (sources.length > 0) autoOpenFromSources(sources)
+    } catch (e) {
+      setMessages((m) => [...m, { role: 'assistant', content: (e as Error).message || 'Query failed.', low: true, clientId: newClientId() }])
     } finally {
       setSending(false)
       setThinking(false)
@@ -1531,26 +1411,24 @@ export default function AssistantPage() {
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside className="w-[228px] flex-shrink-0 flex flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)]">
-        {threadsEnabled && (
-          <div className="px-4 pt-5 pb-3 flex-shrink-0">
-            <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)] mb-3">
-              Conversations
-            </p>
-            <button
-              onClick={() => void createThread()}
-              className="flex items-center gap-2 w-full rounded-[var(--radius-md)] px-3 py-2.5
-                text-[13px] text-[var(--color-text-secondary)] font-medium
-                border border-dashed border-[var(--color-border)] hover:border-primary/60 hover:text-primary
-                hover:bg-[var(--color-accent-light)] transition-all duration-150"
-            >
-              <PlusIcon className="h-3.5 w-3.5 flex-shrink-0" />
-              Start new chat
-            </button>
-            {createError && (
-              <p className="mt-2 text-[11px] text-red-600 leading-snug">{createError}</p>
-            )}
-          </div>
-        )}
+        <div className="px-4 pt-5 pb-3 flex-shrink-0">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)] mb-3">
+            Conversations
+          </p>
+          <button
+            onClick={() => void createThread()}
+            className="flex items-center gap-2 w-full rounded-[var(--radius-md)] px-3 py-2.5
+              text-[13px] text-[var(--color-text-secondary)] font-medium
+              border border-dashed border-[var(--color-border)] hover:border-primary/60 hover:text-primary
+              hover:bg-[var(--color-accent-light)] transition-all duration-150"
+          >
+            <PlusIcon className="h-3.5 w-3.5 flex-shrink-0" />
+            Start new chat
+          </button>
+          {createError && (
+            <p className="mt-2 text-[11px] text-red-600 leading-snug">{createError}</p>
+          )}
+        </div>
 
         {/* Scope status badge */}
         {(activeRepo || totalChunks > 0) && (
@@ -1608,7 +1486,7 @@ export default function AssistantPage() {
 
         {/* Thread list */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {threadsEnabled && threadsLoading && (
+          {threadsLoading && (
             <div className="px-3 pt-1 space-y-0.5" aria-hidden="true">
               {[60, 80, 45, 70, 55].map((w, i) => (
                 <div key={i} className="px-1 py-3 border-b border-[var(--color-border)]/40">
@@ -1656,13 +1534,13 @@ export default function AssistantPage() {
             </div>
           )}
 
-          {threadsEnabled && ragConversations.length > 0 && threads.length > 0 && (
+          {ragConversations.length > 0 && threads.length > 0 && (
             <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-[var(--color-text-tertiary)]">
               Conversations
             </p>
           )}
 
-          {threadsEnabled && threads.map((t) => {
+          {threads.map((t) => {
             const active = t.id === activeThread?.id
             return (
               <button
@@ -1670,9 +1548,15 @@ export default function AssistantPage() {
                 onClick={() => {
                   if (active) return
                   setActiveThread(t)
+                  setActiveRagId('')
                   setCreateError(null)
                   const rm = t.response_mode
                   setAssistantMode(rm === 'power' || rm === 'grounded' ? rm : 'grounded')
+                  // Restore messages from localStorage
+                  try {
+                    const msgs = JSON.parse(localStorage.getItem(`thread_msgs_${t.id}`) ?? '[]') as Msg[]
+                    setMessages(msgs.map((m) => ({ ...m, clientId: newClientId() })))
+                  } catch { setMessages([]) }
                 }}
                 className={[
                   'group relative w-full text-left px-4 py-3 flex items-start gap-2',
@@ -1713,7 +1597,7 @@ export default function AssistantPage() {
       <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-surface)] relative overflow-hidden">
 
         {/* Loading state */}
-        {threadsEnabled && threadsLoading && (
+        {threadsLoading && (
           <>
             <div className="flex-shrink-0 flex items-center gap-3 px-5 border-b border-[var(--color-border)]" style={{ height: 56 }}>
               <Skeleton className="h-4" style={{ width: 180 }} />
@@ -2178,7 +2062,7 @@ export default function AssistantPage() {
               </div>
             </div>
           </>
-        ) : threadsEnabled && !threadsLoading && creatingThread ? (
+        ) : !threadsLoading && creatingThread ? (
           <div className="flex-1 flex flex-col items-center justify-center px-10" role="status" aria-live="polite" aria-busy="true">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -2197,7 +2081,7 @@ export default function AssistantPage() {
               </p>
             </motion.div>
           </div>
-        ) : (!threadsEnabled || !threadsLoading) ? (
+        ) : !threadsLoading ? (
 
           /* ── Welcome state ────────────────────────────────────────────── */
           <div className="flex-1 flex flex-col items-center justify-center px-10">
@@ -2225,20 +2109,20 @@ export default function AssistantPage() {
                 Ask how features work, where logic lives, what data models exist, how components relate, or whether a change is safe to make.
               </p>
 
-              {threadsEnabled && createError && (
+              {createError && (
                 <div className="mb-4 px-3 py-2.5 rounded-xl bg-red-50 text-red-700 text-[13px] leading-snug border border-red-200">
                   {createError}
                 </div>
               )}
 
-              {threadsEnabled && (
+              {(
                 <button onClick={() => void createThread()} className="pk-btn-primary gap-2 mb-8 w-full sm:w-auto">
                   <PlusIcon className="h-4 w-4" />
                   Start a conversation
                 </button>
               )}
 
-              {threadsEnabled && threads.length > 0 && (
+              {threads.length > 0 && (
                 <div className="mb-8">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-tertiary)] mb-3">Recent</p>
                   <div className="space-y-1">
@@ -2259,7 +2143,7 @@ export default function AssistantPage() {
                 </div>
               )}
 
-              {threadsEnabled && (
+              {(
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-tertiary)] mb-3">Try asking</p>
                   <div className="space-y-1.5">
