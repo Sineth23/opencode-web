@@ -9,17 +9,31 @@ import {
   XMarkIcon,
   ArrowPathIcon,
   ExclamationCircleIcon,
-  CodeBracketIcon,
-  DocumentTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  ChevronRightIcon,
+  ChevronDownIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline'
-import {
-  listDatasets,
-  listAvailableRepos,
-  indexDataset,
-  deleteDataset,
-  type Dataset,
-  type AvailableRepo,
-} from '@/lib/assistant-api'
+import { cdkGet } from '@/lib/cdk-api'
+import { listDatasets, indexDataset, deleteDataset, type Dataset } from '@/lib/assistant-api'
+
+// ── S3 browser types ──────────────────────────────────────────────────────────
+type S3Folder = { prefix: string; name: string }
+type S3File   = { key: string; name: string; size: number; lastModified: string }
+type ListResp  = { ok: boolean; folders: S3Folder[]; files: S3File[] }
+
+type FolderNode = {
+  prefix: string
+  name: string
+  state: 'idle' | 'loading' | 'loaded' | 'error'
+  open: boolean
+  children: FolderNode[]
+}
+
+function makeNode(prefix: string, name: string): FolderNode {
+  return { prefix, name, state: 'idle', open: false, children: [] }
+}
 
 const STATUS_CONFIG = {
   READY:    { label: 'Ready',    color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
@@ -28,30 +42,110 @@ const STATUS_CONFIG = {
   DELETING: { label: 'Deleting', color: 'text-gray-500 bg-gray-50 border-gray-200' },
 }
 
-const CUSTOM_VALUE = '__custom__'
+// ── S3 folder tree (recursive) ────────────────────────────────────────────────
+function FolderRow({
+  node,
+  depth,
+  selected,
+  onSelect,
+  onToggle,
+}: {
+  node: FolderNode
+  depth: number
+  selected: string
+  onSelect: (prefix: string, name: string) => void
+  onToggle: (prefix: string) => void
+}) {
+  const isSelected = selected === node.prefix
 
-type IndexMode = 'full' | 'catalog'
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-[12px] transition-colors select-none ${
+          isSelected
+            ? 'bg-primary/10 text-primary font-medium'
+            : 'hover:bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]'
+        }`}
+        style={{ paddingLeft: `${8 + depth * 14}px` }}
+        onClick={() => onToggle(node.prefix)}
+      >
+        {node.state === 'loading' ? (
+          <motion.div
+            className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary flex-shrink-0"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+          />
+        ) : node.open ? (
+          <ChevronDownIcon className="h-3 w-3 flex-shrink-0 opacity-50" />
+        ) : (
+          <ChevronRightIcon className="h-3 w-3 flex-shrink-0 opacity-40" />
+        )}
+        {node.open
+          ? <FolderOpenIcon className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+          : <FolderIcon className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
+        }
+        <span className="truncate flex-1">{node.name}</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onSelect(node.prefix, node.name) }}
+          className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+            isSelected
+              ? 'bg-primary text-white'
+              : 'opacity-0 group-hover:opacity-100 bg-primary/10 text-primary hover:bg-primary hover:text-white'
+          }`}
+          title="Index this directory"
+        >
+          {isSelected ? <CheckIcon className="h-3 w-3" /> : 'Select'}
+        </button>
+      </div>
 
+      {node.open && node.children.length > 0 && (
+        <div>
+          {node.children.map((child) => (
+            <FolderRow
+              key={child.prefix}
+              node={child}
+              depth={depth + 1}
+              selected={selected}
+              onSelect={onSelect}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      )}
+      {node.open && node.state === 'loaded' && node.children.length === 0 && (
+        <p
+          className="text-[10px] text-[var(--color-text-tertiary)] italic py-1"
+          style={{ paddingLeft: `${8 + (depth + 1) * 14 + 18}px` }}
+        >
+          No sub-folders
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function DatasetManager({ activeTenantId }: { activeTenantId?: string | null }) {
   const [open, setOpen]         = useState(false)
   const [datasets, setDatasets] = useState<Dataset[]>([])
-  const [repos, setRepos]       = useState<AvailableRepo[]>([])
   const [loading, setLoading]   = useState(false)
-  const [reposLoading, setReposLoading] = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  // Form state
+  // form
   const [showForm, setShowForm]     = useState(false)
-  const [selected, setSelected]     = useState('')          // worktreePrefix | CUSTOM_VALUE | ''
-  const [indexMode, setIndexMode]   = useState<IndexMode>('full')
-  const [customPrefix, setCustomPrefix] = useState('')
-  const [customName, setCustomName]     = useState('')
-  const [indexing, setIndexing]         = useState(false)
-  const [indexError, setIndexError]     = useState<string | null>(null)
-  const [removingId, setRemovingId]     = useState<string | null>(null)
+  const [indexing, setIndexing]     = useState(false)
+  const [indexError, setIndexError] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+
+  // S3 browser state
+  const [roots, setRoots]             = useState<FolderNode[]>([])
+  const [browserLoading, setBrowserLoading] = useState(false)
+  const [selectedPrefix, setSelectedPrefix] = useState('')
+  const [selectedName, setSelectedName]     = useState('')
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // ── data fetching ────────────────────────────────────────────────────────────
   const fetchDatasets = useCallback(async () => {
     try {
       const d = await listDatasets(activeTenantId ?? undefined)
@@ -61,25 +155,36 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
     }
   }, [activeTenantId])
 
-  const fetchRepos = useCallback(async () => {
-    setReposLoading(true)
-    try {
-      const d = await listAvailableRepos(activeTenantId ?? undefined)
-      setRepos(d.repos ?? [])
-    } catch {
-      // silently fail
-    } finally {
-      setReposLoading(false)
-    }
+  const loadChildren = useCallback(async (prefix: string): Promise<FolderNode[]> => {
+    const qs = new URLSearchParams({ prefix })
+    if (activeTenantId) qs.set('tenantId', activeTenantId)
+    const data = await cdkGet<ListResp>(`/opencode/files?${qs.toString()}`)
+    return (data.folders ?? []).map((f) => makeNode(f.prefix, f.name))
   }, [activeTenantId])
+
+  // Load root folders when form opens
+  const loadRoots = useCallback(async () => {
+    setBrowserLoading(true)
+    try {
+      const children = await loadChildren('projects/')
+      setRoots(children)
+    } catch {
+      setRoots([])
+    } finally {
+      setBrowserLoading(false)
+    }
+  }, [loadChildren])
 
   useEffect(() => {
     if (!open) return
     setLoading(true)
     setError(null)
     void fetchDatasets().finally(() => setLoading(false))
-    void fetchRepos()
-  }, [open, fetchDatasets, fetchRepos])
+  }, [open, fetchDatasets])
+
+  useEffect(() => {
+    if (showForm && roots.length === 0 && !browserLoading) void loadRoots()
+  }, [showForm, roots.length, browserLoading, loadRoots])
 
   useEffect(() => {
     const busy = datasets.some((d) => d.status === 'INDEXING' || d.status === 'DELETING')
@@ -89,48 +194,72 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
       clearInterval(pollRef.current)
       pollRef.current = null
     }
-    return () => {
-      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-    }
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
   }, [datasets, fetchDatasets])
 
+  // ── tree toggle ──────────────────────────────────────────────────────────────
+  const toggleNode = useCallback(async (prefix: string) => {
+    const update = (nodes: FolderNode[]): FolderNode[] =>
+      nodes.map((n) => {
+        if (n.prefix === prefix) {
+          if (n.open) return { ...n, open: false }
+          if (n.state === 'loaded') return { ...n, open: true }
+          return { ...n, open: true, state: 'loading' }
+        }
+        return { ...n, children: update(n.children) }
+      })
+
+    setRoots((prev) => update(prev))
+
+    // find node to check if we need to load
+    const find = (nodes: FolderNode[]): FolderNode | null => {
+      for (const n of nodes) {
+        if (n.prefix === prefix) return n
+        const found = find(n.children)
+        if (found) return found
+      }
+      return null
+    }
+
+    const node = find(roots)
+    if (!node || node.state === 'loaded' || node.open) return
+
+    try {
+      const children = await loadChildren(prefix)
+      const fill = (nodes: FolderNode[]): FolderNode[] =>
+        nodes.map((n) =>
+          n.prefix === prefix
+            ? { ...n, state: 'loaded', open: true, children }
+            : { ...n, children: fill(n.children) }
+        )
+      setRoots((prev) => fill(prev))
+    } catch {
+      const err = (nodes: FolderNode[]): FolderNode[] =>
+        nodes.map((n) =>
+          n.prefix === prefix
+            ? { ...n, state: 'error', open: false }
+            : { ...n, children: err(n.children) }
+        )
+      setRoots((prev) => err(prev))
+    }
+  }, [roots, loadChildren])
+
+  // ── actions ──────────────────────────────────────────────────────────────────
   function resetForm() {
     setShowForm(false)
-    setSelected('')
-    setIndexMode('full')
-    setCustomPrefix('')
-    setCustomName('')
+    setSelectedPrefix('')
+    setSelectedName('')
     setIndexError(null)
   }
 
-  const selectedRepo = repos.find((r) => r.worktreePrefix === selected) ?? null
-  const isCustom     = selected === CUSTOM_VALUE
-
   async function handleIndex() {
     setIndexError(null)
-
-    let name   = ''
-    let prefix = ''
-
-    if (isCustom) {
-      name   = customName.trim()
-      prefix = customPrefix.trim()
-      if (!name)   { setIndexError('Enter a name for this dataset.'); return }
-      if (!prefix) { setIndexError('Enter the S3 path to index.'); return }
-    } else if (selectedRepo) {
-      name   = selectedRepo.name
-      prefix = indexMode === 'catalog' && selectedRepo.catalogPrefix
-        ? selectedRepo.catalogPrefix
-        : selectedRepo.worktreePrefix
-    } else {
-      setIndexError('Select a source to index.')
-      return
-    }
-
+    if (!selectedPrefix) { setIndexError('Select a directory to index.'); return }
     setIndexing(true)
     try {
-      await indexDataset(name, prefix, 'full', activeTenantId ?? undefined)
+      await indexDataset(selectedName || selectedPrefix, selectedPrefix, 'full', activeTenantId ?? undefined)
       resetForm()
+      setRoots([])
       await fetchDatasets()
     } catch (e) {
       setIndexError((e as Error).message)
@@ -153,10 +282,8 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
   }
 
   const readyCount = datasets.filter((d) => d.status === 'READY').length
-  const canSubmit  = !indexing && (
-    isCustom ? (!!customPrefix.trim() && !!customName.trim()) : !!selectedRepo
-  )
 
+  // ── render ────────────────────────────────────────────────────────────────────
   return (
     <>
       {/* Sidebar trigger */}
@@ -202,7 +329,7 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                 <div>
                   <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Knowledge bases</h2>
                   <p className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5">
-                    Index repos or directories so the assistant can answer questions about them.
+                    Browse your S3 bucket and index a directory for the assistant.
                   </p>
                 </div>
                 <button
@@ -223,7 +350,7 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                     className="flex items-center gap-2 w-full px-4 py-3 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-colors text-left"
                   >
                     <PlusIcon className="h-4 w-4 text-primary shrink-0" />
-                    Index a repo or directory
+                    Index a directory
                   </button>
 
                   <AnimatePresence>
@@ -235,140 +362,65 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                         transition={{ duration: 0.18 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-4 pb-4 pt-3 border-t border-[var(--color-border)] space-y-4">
+                        <div className="border-t border-[var(--color-border)]">
 
-                          {/* Dropdown */}
-                          <div>
-                            <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1.5">
-                              Select source
-                            </label>
-                            <select
-                              value={selected}
-                              onChange={(e) => { setSelected(e.target.value); setIndexMode('full') }}
-                              disabled={reposLoading}
-                              className="w-full text-sm rounded-lg border border-[var(--color-border)] px-3 py-2
-                                bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]
-                                focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10
-                                disabled:opacity-50"
-                            >
-                              <option value="">
-                                {reposLoading ? 'Loading…' : '— pick a repo or directory —'}
-                              </option>
-                              {repos.length > 0 && (
-                                <optgroup label="Cloned repos">
-                                  {repos.map((r) => (
-                                    <option key={r.worktreePrefix} value={r.worktreePrefix}>
-                                      {r.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                              <optgroup label="Other">
-                                <option value={CUSTOM_VALUE}>Custom S3 path…</option>
-                              </optgroup>
-                            </select>
-
-                          {/* S3 path preview */}
-                          {selectedRepo && (
-                            <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]">
-                              <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-0.5">S3 path to index</p>
-                              <p className="text-[11px] font-mono text-[var(--color-text-secondary)] break-all leading-relaxed">
-                                {indexMode === 'catalog' && selectedRepo.catalogPrefix
-                                  ? selectedRepo.catalogPrefix
-                                  : selectedRepo.worktreePrefix}
-                              </p>
+                          {/* Selected path banner */}
+                          {selectedPrefix ? (
+                            <div className="px-4 pt-3 pb-2">
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700">
+                                <CheckIcon className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Selected for indexing</p>
+                                  <p className="text-[11px] font-mono text-emerald-800 dark:text-emerald-300 truncate">{selectedPrefix}</p>
+                                </div>
+                                <button
+                                  onClick={() => { setSelectedPrefix(''); setSelectedName('') }}
+                                  className="text-emerald-600 hover:text-emerald-800 flex-shrink-0"
+                                >
+                                  <XMarkIcon className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
+                          ) : (
+                            <p className="px-4 pt-3 pb-1 text-[11px] text-[var(--color-text-tertiary)]">
+                              Browse and click <strong>Select</strong> on any folder to index it.
+                            </p>
                           )}
+
+                          {/* S3 folder tree */}
+                          <div className="px-2 pb-2 max-h-64 overflow-y-auto">
+                            {browserLoading ? (
+                              <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-[var(--color-text-tertiary)]">
+                                <motion.div
+                                  className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary"
+                                  animate={{ rotate: 360 }}
+                                  transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+                                />
+                                Loading directories…
+                              </div>
+                            ) : roots.length === 0 ? (
+                              <p className="px-3 py-4 text-[12px] text-[var(--color-text-tertiary)]">No directories found.</p>
+                            ) : (
+                              <div className="group">
+                                {roots.map((node) => (
+                                  <FolderRow
+                                    key={node.prefix}
+                                    node={node}
+                                    depth={0}
+                                    selected={selectedPrefix}
+                                    onSelect={(prefix, name) => { setSelectedPrefix(prefix); setSelectedName(name) }}
+                                    onToggle={toggleNode}
+                                  />
+                                ))}
+                              </div>
+                            )}
                           </div>
 
-                          {/* Repo mode toggle */}
-                          {selectedRepo && (
-                            <div>
-                              <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1.5">
-                                What to index
-                              </label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <button
-                                  onClick={() => setIndexMode('full')}
-                                  className={`flex items-start gap-2 px-3 py-2.5 rounded-lg border text-left transition-all ${
-                                    indexMode === 'full'
-                                      ? 'border-primary bg-[var(--color-accent-light)]'
-                                      : 'border-[var(--color-border)] hover:border-primary/40'
-                                  }`}
-                                >
-                                  <CodeBracketIcon className={`h-4 w-4 mt-0.5 shrink-0 ${indexMode === 'full' ? 'text-primary' : 'text-[var(--color-text-tertiary)]'}`} />
-                                  <div>
-                                    <p className="text-xs font-semibold text-[var(--color-text-primary)]">Full repo</p>
-                                    <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">All code and docs</p>
-                                  </div>
-                                </button>
-                                <button
-                                  onClick={() => setIndexMode('catalog')}
-                                  disabled={!selectedRepo.catalogPrefix}
-                                  className={`flex items-start gap-2 px-3 py-2.5 rounded-lg border text-left transition-all ${
-                                    !selectedRepo.catalogPrefix
-                                      ? 'opacity-40 cursor-not-allowed border-[var(--color-border)]'
-                                      : indexMode === 'catalog'
-                                        ? 'border-primary bg-[var(--color-accent-light)]'
-                                        : 'border-[var(--color-border)] hover:border-primary/40'
-                                  }`}
-                                >
-                                  <DocumentTextIcon className={`h-4 w-4 mt-0.5 shrink-0 ${indexMode === 'catalog' ? 'text-primary' : 'text-[var(--color-text-tertiary)]'}`} />
-                                  <div>
-                                    <p className="text-xs font-semibold text-[var(--color-text-primary)]">Docs only</p>
-                                    <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
-                                      {selectedRepo.catalogPrefix ? 'Catalog markdown only' : 'Not available'}
-                                    </p>
-                                  </div>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Custom path inputs */}
-                          {isCustom && (
-                            <div className="space-y-3">
-                              <div>
-                                <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1.5">
-                                  Dataset name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={customName}
-                                  onChange={(e) => setCustomName(e.target.value)}
-                                  placeholder="e.g. KlickInc SRED 2025 docs"
-                                  className="w-full text-sm rounded-lg border border-[var(--color-border)] px-3 py-2
-                                    bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]
-                                    placeholder:text-[var(--color-text-tertiary)]
-                                    focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1.5">
-                                  S3 path (within your tenant bucket)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={customPrefix}
-                                  onChange={(e) => setCustomPrefix(e.target.value)}
-                                  placeholder="projects/KlickInc/sred/klick-2025-sred-final-package/"
-                                  className="w-full text-sm font-mono rounded-lg border border-[var(--color-border)] px-3 py-2
-                                    bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]
-                                    placeholder:text-[var(--color-text-tertiary)]
-                                    focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
-                                />
-                                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
-                                  Path within your bucket — no <code className="font-mono">s3://</code> or bucket name. e.g. <code className="font-mono">projects/MyOrg/sred/2025/</code>
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
                           {indexError && (
-                            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{indexError}</p>
+                            <p className="mx-4 mb-3 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{indexError}</p>
                           )}
 
-                          <div className="flex gap-2 justify-end">
+                          <div className="flex gap-2 justify-end px-4 pb-4">
                             <button
                               onClick={resetForm}
                               className="px-3 py-1.5 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
@@ -377,7 +429,7 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                             </button>
                             <button
                               onClick={() => void handleIndex()}
-                              disabled={!canSubmit}
+                              disabled={!selectedPrefix || indexing}
                               className="px-4 py-1.5 text-sm font-medium bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                             >
                               {indexing ? (
@@ -415,12 +467,12 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
                   ) : datasets.length === 0 ? (
                     <div className="text-center py-8 text-[var(--color-text-tertiary)]">
                       <CircleStackIcon className="h-7 w-7 mx-auto mb-2 opacity-30" />
-                      <p className="text-xs">No datasets yet. Index a repo above to get started.</p>
+                      <p className="text-xs">No datasets yet. Index a directory above to get started.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
                       {datasets.map((ds) => {
-                        const cfg   = STATUS_CONFIG[ds.status]
+                        const cfg    = STATUS_CONFIG[ds.status]
                         const isBusy = ds.status === 'INDEXING' || ds.status === 'DELETING'
                         return (
                           <div
