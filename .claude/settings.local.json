@@ -340,10 +340,34 @@
       "PowerShell($env:VERCEL_TOKEN)",
       "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\AppData\\\\Local\\\\com.vercel.cli\" -Recurse | Select-Object FullName)",
       "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\AppData\\\\Local\\\\com.vercel.cli\" -Force | Select-Object Name, FullName)",
-      "PowerShell(Get-ChildItem \"$env:LOCALAPPDATA\\\\com.vercel.cli\" -Force -ErrorAction SilentlyContinue | Select-Object Name, Length, Attributes)"
+      "PowerShell(Get-ChildItem \"$env:LOCALAPPDATA\\\\com.vercel.cli\" -Force -ErrorAction SilentlyContinue | Select-Object Name, Length, Attributes)",
+      "PowerShell(Get-Process \"Docker Desktop\" -ErrorAction SilentlyContinue)",
+      "Bash(cp \"/c/Users/Sineth/opencode-web/assets/AutoDoc-Logo-File-01.svg\" \"/c/Users/Sineth/opencode/packages/app/public/autodoc-logo.svg\")",
+      "Bash(xargs grep -n \"dark\\\\|prefers\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(xargs grep -l \"cognitoGetIdToken\\\\|cognito\")",
+      "PowerShell(aws logs tail \"/aws/lambda/autodoc-control-plane-api-AdminTenantsListFn186087-73TAokKUJbeD\" --since 1h --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(aws dynamodb scan --table-name \"autodoc-control-plane-data-TenantsTableB701DC57-1TQINTQQ7XW4K\" --profile autodoc-prod --region ca-central-1 --query \"Items\" 2>&1)",
+      "PowerShell(aws logs tail \"/aws/lambda/autodoc-control-plane-api-AdminTenantsListFn186087-73TAokKUJbeD\" --since 5m --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(aws logs tail \"/aws/lambda/autodoc-control-plane-api-AdminTenantsListFn186087-73TAokKUJbeD\" --since 2m --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(aws logs tail \"/aws/lambda/autodoc-control-plane-api-AdminTenantsListFn186087-73TAokKUJbeD\" --since 3m --profile autodoc-prod --region ca-central-1 2>&1)",
+      "PowerShell(aws dynamodb query --table-name \"autodoc-control-plane-data-TenantsTableB701DC57-1TQINTQQ7XW4K\" --profile autodoc-prod --region ca-central-1 --key-condition-expression \"tenantId = :t\" --expression-attribute-values '{\":t\": {\"S\": \"tenant-517528935023\"}}' 2>&1)",
+      "PowerShell(\\(Get-Content C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\stacks\\\\api_stack.py | Measure-Object -Line\\).Lines)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\lambdas\\\\assistant_available_repos)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\lambdas\\\\assistant_datasets_list)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\lambdas\\\\assistant_index)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\lambdas\\\\assistant_datasets_delete)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\lambdas\\\\assistant_query)",
+      "PowerShell(\\(Get-Content C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\stacks\\\\api_stack.py\\)[-5..-1])",
+      "PowerShell($lines = Get-Content C:\\\\Users\\\\Sineth\\\\autodoc-control-plane-cdk\\\\stacks\\\\api_stack.py; $lines.Count)",
+      "Bash(python3 -c ' *)",
+      "PowerShell(aws iam list-role-policies --role-name \"autodoc-tenant-tenant-517528935023-workload\" --profile autodoc-prod --output json)",
+      "PowerShell(aws iam list-attached-role-policies --role-name \"autodoc-tenant-tenant-517528935023-workload\" --profile autodoc-prod --output json)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs"
+      "C:\\Users\\Sineth\\autodoc-control-plane-cdk\\docs",
+      "C:\\Users\\Sineth\\opencode\\packages\\app\\public"
     ]
   }
 }
