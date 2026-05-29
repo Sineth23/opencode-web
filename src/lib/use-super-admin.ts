@@ -103,6 +103,15 @@ export function useSuperAdmin(): SuperAdminState {
     })()
   }, [])
 
+  // On client mount: read localStorage and sync state (handles SSR where _activeTenantId may be null)
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored && stored !== _activeTenantId) {
+      setGlobalActiveTenant(stored)
+      setLocalTenantId(stored)
+    }
+  }, [])
+
   // Subscribe to global tenant changes
   useEffect(() => {
     const sync = () => setLocalTenantId(_activeTenantId)
