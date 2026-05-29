@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { cognitoGetIdToken } from '@/lib/cognito'
 
 const SUPERADMIN_GROUP = 'autodoc-superadmin'
+const STORAGE_KEY = 'autodoc_superadmin_tenant'
 
 type SuperAdminState = {
   isSuperAdmin: boolean
@@ -12,8 +13,9 @@ type SuperAdminState = {
   loading: boolean
 }
 
-// Module-level state so the switcher persists across page navigations
-let _activeTenantId: string | null = null
+// Module-level state — read from localStorage on first import so it survives page refreshes
+const _stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+let _activeTenantId: string | null = _stored || null
 const _listeners = new Set<() => void>()
 let _isSuperAdmin: boolean | null = null  // cached after first JWT decode
 
@@ -23,6 +25,10 @@ function notifyListeners() {
 
 export function setGlobalActiveTenant(id: string | null) {
   _activeTenantId = id
+  if (typeof window !== 'undefined') {
+    if (id) localStorage.setItem(STORAGE_KEY, id)
+    else localStorage.removeItem(STORAGE_KEY)
+  }
   notifyListeners()
 }
 
