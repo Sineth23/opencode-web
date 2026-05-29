@@ -22,6 +22,7 @@ import { useWorkspace } from '@/components/providers/WorkspaceContext'
 import PlatformAdminNavLink from '@/components/admin/PlatformAdminNavLink'
 import BackgroundActivityBanner from '@/components/workspace/BackgroundActivityBanner'
 import SuperAdminSwitcher from '@/components/layout/SuperAdminSwitcher'
+import { useSuperAdmin } from '@/lib/use-super-admin'
 
 const allNavItems = [
   { href: '/dashboard', label: 'Overview', icon: HomeIcon, adminOnly: false },
@@ -42,8 +43,9 @@ export default function ProductShell({
 }) {
   const pathname = usePathname()
   const { workspace, loading: wsLoading } = useWorkspace()
+  const { isSuperAdmin } = useSuperAdmin()
 
-  const isAdmin = workspace?.membership_role === 'owner' || workspace?.membership_role === 'admin'
+  const isAdmin = isSuperAdmin || workspace?.membership_role === 'owner' || workspace?.membership_role === 'admin'
   const nav = allNavItems.filter((item) => !item.adminOnly || isAdmin)
 
   const display = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Account'

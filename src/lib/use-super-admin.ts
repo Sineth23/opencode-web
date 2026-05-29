@@ -15,6 +15,7 @@ type SuperAdminState = {
 // Module-level state so the switcher persists across page navigations
 let _activeTenantId: string | null = null
 const _listeners = new Set<() => void>()
+let _isSuperAdmin: boolean | null = null  // cached after first JWT decode
 
 function notifyListeners() {
   _listeners.forEach((fn) => fn())
@@ -32,6 +33,22 @@ export function getActiveTenantId(): string | null {
 export function subscribeToActiveTenant(fn: () => void): () => void {
   _listeners.add(fn)
   return () => { _listeners.delete(fn) }
+}
+
+export async function resolveIsSuperAdmin(): Promise<boolean> {
+  if (_isSuperAdmin !== null) return _isSuperAdmin
+  try {
+    const token = await cognitoGetIdToken()
+    if (token) {
+      const groups = decodeJwtGroups(token)
+      _isSuperAdmin = groups.includes(SUPERADMIN_GROUP)
+    } else {
+      _isSuperAdmin = false
+    }
+  } catch {
+    _isSuperAdmin = false
+  }
+  return _isSuperAdmin
 }
 
 function decodeJwtGroups(token: string): string[] {

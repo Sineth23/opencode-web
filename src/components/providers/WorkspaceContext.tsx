@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { authorizedFetch } from '@/lib/api'
 import { isCognitoConfigured } from '@/lib/cognito'
 import { cdkGet } from '@/lib/cdk-api'
-import { subscribeToActiveTenant, getActiveTenantId } from '@/lib/use-super-admin'
+import { subscribeToActiveTenant, getActiveTenantId, resolveIsSuperAdmin } from '@/lib/use-super-admin'
 
 export type WorkspaceSummary = {
   id: string
@@ -62,9 +62,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             membership_role: data.role ?? 'member',
           })
         } else {
-          // 404 — user has no tenant yet
-          setNoTenant(true)
-          setWorkspace(null)
+          // SuperAdmins have no personal tenant — never show TenantSetup to them
+          const superAdmin = await resolveIsSuperAdmin()
+          if (superAdmin) {
+            setWorkspace(null)
+          } else {
+            setNoTenant(true)
+            setWorkspace(null)
+          }
         }
         return
       }
