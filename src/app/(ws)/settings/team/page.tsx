@@ -230,9 +230,8 @@ export default function TeamPage() {
   const [inviteMsg, setInviteMsg]   = useState<{ ok: boolean; text: string } | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
 
-  const membersPath = isSuperAdmin && activeTenantId
-    ? `/tenant/members?tenantId=${activeTenantId}`
-    : '/tenant/members'
+  // withTenantId() in cdkFetch auto-injects ?tenantId= for SuperAdmin overrides
+  const membersPath = '/tenant/members'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -255,10 +254,7 @@ export default function TeamPage() {
     setInviting(true)
     setInviteMsg(null)
     try {
-      const path = isSuperAdmin && activeTenantId
-        ? `/tenant/members?tenantId=${activeTenantId}`
-        : '/tenant/members'
-      await cdkPost(path, { email: trimmed, role: inviteRole })
+      await cdkPost('/tenant/members', { email: trimmed, role: inviteRole })
       setInviteMsg({ ok: true, text: `Invitation sent to ${trimmed}` })
       setEmail('')
       void load()
