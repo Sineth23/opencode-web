@@ -8,6 +8,8 @@ import { authorizedFetch } from '@/lib/api'
 import { cdkGet, cdkPost, cdkDelete } from '@/lib/cdk-api'
 import GitHubRepoWorkflowSection from '@/components/settings/GitHubRepoWorkflowSection'
 import GitHubSingleCloneSection from '@/components/settings/GitHubSingleCloneSection'
+import JiraConnectionsSection from '@/components/settings/JiraConnectionsSection'
+import PmUploadSection from '@/components/settings/PmUploadSection'
 import { SUPPORT_EMAIL, SUPPORT_MAILTO, withSupportContact } from '@/lib/support-copy'
 import { useWorkspace } from '@/components/providers/WorkspaceContext'
 import BitbucketSyncSection from '@/components/settings/BitbucketSyncSection'
@@ -557,6 +559,10 @@ export default function IntegrationsSettingsClient() {
       <GitHubSingleCloneSection connections={ghConnections} />
 
       <GitHubRepoWorkflowSection connections={ghConnections} />
+
+      <JiraConnectionsSection />
+
+      <PmUploadSection />
 
       <p className="text-sm text-[var(--color-text-tertiary)]">
         <Link href="/dashboard" className="text-primary font-medium hover:underline">
