@@ -9,6 +9,7 @@ import {
   ArrowPathIcon,
   ArrowRightOnRectangleIcon,
   BookOpenIcon,
+  BuildingOffice2Icon,
   ChatBubbleLeftRightIcon,
   HomeIcon,
   PuzzlePieceIcon,
@@ -25,13 +26,14 @@ import SuperAdminSwitcher from '@/components/layout/SuperAdminSwitcher'
 import { useSuperAdmin } from '@/lib/use-super-admin'
 
 const allNavItems = [
-  { href: '/dashboard', label: 'Overview', icon: HomeIcon, adminOnly: false },
-  { href: '/docs', label: 'Documentation', icon: BookOpenIcon, adminOnly: false },
-  { href: '/workspace', label: 'AI Workspace', icon: ChatBubbleLeftRightIcon, adminOnly: false },
-  { href: '/assistant', label: 'Assistant', icon: ChatBubbleLeftRightIcon, adminOnly: false },
-  { href: '/settings/sync', label: 'Sync center', icon: ArrowPathIcon, adminOnly: true },
-  { href: '/settings/integrations', label: 'Integrations', icon: PuzzlePieceIcon, adminOnly: true },
-  { href: '/settings/team', label: 'Team', icon: UsersIcon, adminOnly: true },
+  { href: '/dashboard', label: 'Overview', icon: HomeIcon, adminOnly: false, superadminOnly: false },
+  { href: '/docs', label: 'Documentation', icon: BookOpenIcon, adminOnly: false, superadminOnly: false },
+  { href: '/workspace', label: 'AI Workspace', icon: ChatBubbleLeftRightIcon, adminOnly: false, superadminOnly: false },
+  { href: '/assistant', label: 'Assistant', icon: ChatBubbleLeftRightIcon, adminOnly: false, superadminOnly: false },
+  { href: '/settings/sync', label: 'Sync center', icon: ArrowPathIcon, adminOnly: true, superadminOnly: false },
+  { href: '/settings/integrations', label: 'Integrations', icon: PuzzlePieceIcon, adminOnly: true, superadminOnly: false },
+  { href: '/settings/team', label: 'Team', icon: UsersIcon, adminOnly: true, superadminOnly: false },
+  { href: '/settings/admin', label: 'Tenant Management', icon: BuildingOffice2Icon, adminOnly: false, superadminOnly: true },
 ]
 
 export default function ProductShell({
@@ -46,7 +48,9 @@ export default function ProductShell({
   const { isSuperAdmin } = useSuperAdmin()
 
   const isAdmin = isSuperAdmin || workspace?.membership_role === 'owner' || workspace?.membership_role === 'admin'
-  const nav = allNavItems.filter((item) => !item.adminOnly || isAdmin)
+  const nav = allNavItems.filter(
+    (item) => (!item.adminOnly || isAdmin) && (!item.superadminOnly || isSuperAdmin)
+  )
 
   const display = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Account'
 
