@@ -33,7 +33,17 @@ export function setGlobalActiveTenant(id: string | null) {
 }
 
 export function getActiveTenantId(): string | null {
-  return _activeTenantId
+  if (_activeTenantId) return _activeTenantId
+  // Module may have initialized server-side (SSR) where window is undefined;
+  // read from localStorage at call-time as fallback.
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      _activeTenantId = stored
+      return stored
+    }
+  }
+  return null
 }
 
 export function subscribeToActiveTenant(fn: () => void): () => void {
