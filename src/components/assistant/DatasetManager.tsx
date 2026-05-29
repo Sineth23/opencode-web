@@ -125,7 +125,7 @@ function FolderRow({
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function DatasetManager({ activeTenantId }: { activeTenantId?: string | null }) {
+export default function DatasetManager({ activeTenantId: _activeTenantId }: { activeTenantId?: string | null }) {
   const [open, setOpen]         = useState(false)
   const [datasets, setDatasets] = useState<Dataset[]>([])
   const [loading, setLoading]   = useState(false)
@@ -148,19 +148,18 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
   // ── data fetching ────────────────────────────────────────────────────────────
   const fetchDatasets = useCallback(async () => {
     try {
-      const d = await listDatasets(activeTenantId ?? undefined)
+      const d = await listDatasets()
       setDatasets(d.datasets ?? [])
     } catch (e) {
       setError((e as Error).message)
     }
-  }, [activeTenantId])
+  }, [])
 
   const loadChildren = useCallback(async (prefix: string): Promise<FolderNode[]> => {
-    const qs = new URLSearchParams({ prefix })
-    if (activeTenantId) qs.set('tenantId', activeTenantId)
-    const data = await cdkGet<ListResp>(`/opencode/files?${qs.toString()}`)
+    // withTenantId() in cdkFetch auto-injects ?tenantId= — do not add it manually
+    const data = await cdkGet<ListResp>(`/opencode/files?prefix=${encodeURIComponent(prefix)}`)
     return (data.folders ?? []).map((f) => makeNode(f.prefix, f.name))
-  }, [activeTenantId])
+  }, [])
 
   // Load root folders when form opens
   const loadRoots = useCallback(async () => {
@@ -257,7 +256,7 @@ export default function DatasetManager({ activeTenantId }: { activeTenantId?: st
     if (!selectedPrefix) { setIndexError('Select a directory to index.'); return }
     setIndexing(true)
     try {
-      await indexDataset(selectedName || selectedPrefix, selectedPrefix, 'full', activeTenantId ?? undefined)
+      await indexDataset(selectedName || selectedPrefix, selectedPrefix, 'full')
       resetForm()
       setRoots([])
       await fetchDatasets()

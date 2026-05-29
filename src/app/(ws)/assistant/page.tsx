@@ -1044,7 +1044,7 @@ export default function AssistantPage() {
 
   // ── Load RAG datasets (READY only) ────────────────────────────────────────
   useEffect(() => {
-    void listDatasets(activeTenantId ?? undefined)
+    void listDatasets()
       .then((d) => setRagDatasets((d.datasets ?? []).filter((ds) => ds.status === 'READY')))
       .catch(console.error)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1282,7 +1282,7 @@ export default function AssistantPage() {
       const userMsg: Msg = { role: 'user', content: q, clientId: newClientId() }
       setMessages((m) => [...m, userMsg])
       try {
-        const result = await queryAssistant(q, ids, activeTenantId ?? undefined, ragModel)
+        const result = await queryAssistant(q, ids, ragModel)
         const sources: SourceRef[] = result.sources.map((s) => ({
           label: s.filePath.split('/').pop() ?? s.filePath,
           path: s.filePath,
@@ -1360,7 +1360,7 @@ export default function AssistantPage() {
 
     try {
       const allIds = ragDatasets.map((d) => d.datasetId)
-      const result = await queryAssistant(q, allIds, activeTenantId ?? undefined, ragModel)
+      const result = await queryAssistant(q, allIds, ragModel)
       const sources: SourceRef[] = result.sources.map((s) => ({
         label: s.filePath.split('/').pop() ?? s.filePath,
         path: s.filePath,

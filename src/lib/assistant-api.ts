@@ -27,22 +27,22 @@ export type QuerySource = {
   datasetName: string
 }
 
-export function listDatasets(tenantId?: string) {
-  const qs = tenantId ? `?tenantId=${tenantId}` : ''
-  return cdkGet<{ ok: boolean; datasets: Dataset[] }>(`/assistant/datasets${qs}`)
+// Note: withTenantId() in cdkFetch auto-injects ?tenantId= for SuperAdmin overrides.
+// Do NOT pass tenantId manually here — it would double-inject and break the DynamoDB lookup.
+
+export function listDatasets() {
+  return cdkGet<{ ok: boolean; datasets: Dataset[] }>('/assistant/datasets')
 }
 
-export function listAvailableRepos(tenantId?: string) {
-  const qs = tenantId ? `?tenantId=${tenantId}` : ''
-  return cdkGet<{ ok: boolean; repos: AvailableRepo[] }>(`/assistant/available-repos${qs}`)
+export function listAvailableRepos() {
+  return cdkGet<{ ok: boolean; repos: AvailableRepo[] }>('/assistant/available-repos')
 }
 
-export function indexDataset(name: string, s3Prefix: string, mode: 'full' | 'catalog', tenantId?: string) {
+export function indexDataset(name: string, s3Prefix: string, mode: 'full' | 'catalog') {
   return cdkPost<{ ok: boolean; datasetId: string }>('/assistant/datasets', {
     name,
     s3Prefix,
     mode,
-    ...(tenantId ? { tenantId } : {}),
   })
 }
 
@@ -50,11 +50,10 @@ export function deleteDataset(datasetId: string) {
   return cdkDelete<{ ok: boolean }>(`/assistant/datasets/${datasetId}`)
 }
 
-export function queryAssistant(question: string, datasetIds: string[], tenantId?: string, model?: string) {
+export function queryAssistant(question: string, datasetIds: string[], model?: string) {
   return cdkPost<{ ok: boolean; answer: string; sources: QuerySource[] }>('/assistant/query', {
     question,
     datasetIds,
-    ...(tenantId ? { tenantId } : {}),
     ...(model ? { model } : {}),
   })
 }
