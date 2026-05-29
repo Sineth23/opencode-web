@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { BuildingOfficeIcon, ChevronDownIcon } from '@heroicons/react/20/solid'
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
@@ -18,11 +17,9 @@ export default function SuperAdminSwitcher() {
   const { isSuperAdmin, activeTenantId, setActiveTenantId, loading } = useSuperAdmin()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [fetching, setFetching] = useState(false)
-  const router = useRouter()
-
   function switchTenant(id: string | null) {
     setActiveTenantId(id)
-    router.refresh()
+    window.location.reload()
   }
 
   useEffect(() => {
