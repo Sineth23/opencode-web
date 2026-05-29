@@ -2,23 +2,17 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowTopRightOnSquareIcon, KeyIcon, StopIcon, PlayIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline'
-import { cognitoGetIdToken } from '@/lib/cognito'
+import { cdkFetch } from '@/lib/cdk-api'
 
 const SESSION_KEY = 'autodoc_workspace_session_id'
 const PASSWORD_KEY = 'autodoc_workspace_session_password'
 const ALB_URL = process.env.NEXT_PUBLIC_ALB_URL || ''
-const API_URL = process.env.NEXT_PUBLIC_CDK_API_URL || 'https://4aukdm2t58.execute-api.ca-central-1.amazonaws.com'
 
 type Phase = 'idle' | 'starting' | 'running' | 'stopping' | 'error'
 
 async function apiFetch(path: string, method: string, body?: object) {
-  const token = cognitoGetIdToken() || localStorage.getItem('cognito_id_token')
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await cdkFetch(path, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
   return res.json()
