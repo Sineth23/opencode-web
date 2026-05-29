@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { BuildingOfficeIcon, ChevronDownIcon } from '@heroicons/react/20/solid'
 import { Menu, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
@@ -17,6 +18,12 @@ export default function SuperAdminSwitcher() {
   const { isSuperAdmin, activeTenantId, setActiveTenantId, loading } = useSuperAdmin()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [fetching, setFetching] = useState(false)
+  const router = useRouter()
+
+  function switchTenant(id: string | null) {
+    setActiveTenantId(id)
+    router.refresh()
+  }
 
   useEffect(() => {
     if (!isSuperAdmin) return
@@ -59,7 +66,7 @@ export default function SuperAdminSwitcher() {
             {({ active: a }) => (
               <button
                 type="button"
-                onClick={() => setActiveTenantId(null)}
+                onClick={() => switchTenant(null)}
                 className={`flex w-full items-center gap-2 px-3 py-2 text-sm ${
                   a ? 'bg-gray-50' : ''
                 } ${!activeTenantId ? 'text-primary font-medium' : 'text-gray-700'}`}
@@ -77,7 +84,7 @@ export default function SuperAdminSwitcher() {
               {({ active: a }) => (
                 <button
                   type="button"
-                  onClick={() => setActiveTenantId(t.tenantId)}
+                  onClick={() => switchTenant(t.tenantId)}
                   className={`flex w-full items-center gap-2 px-3 py-2 text-sm ${
                     a ? 'bg-gray-50' : ''
                   } ${activeTenantId === t.tenantId ? 'text-primary font-medium' : 'text-gray-700'}`}
